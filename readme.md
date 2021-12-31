@@ -15,6 +15,7 @@
 ### Wymagane oprogramowanie
 - CMake ≥3.13
 - Dowolny kompilator C++ obsługujący standard C++17 (na pewno działa GCC 11.1.0)
+- GLFW3
 - System operacyjny Linux (z powodu użycia BSD sockets)
 
 ### Przygotowanie projektu do budowy

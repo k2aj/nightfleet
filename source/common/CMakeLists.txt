@@ -1,3 +1,1 @@
-target_sources(nfcommon PRIVATE 
-    dummy.cpp
-)
+add_subdirectory(engine)
