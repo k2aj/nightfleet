@@ -1,5 +1,10 @@
 #include <iostream>
 
+#include <csignal>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
 #include <glm/vec2.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -8,12 +13,56 @@
 #include <imgui_impl_opengl3.h>
 
 #include <scope_guard.h>
+#include <network/defaults.h>
+#include <network/message.h>
 
 void printGlfwError(const std::string &message, std::ostream &out = std::cerr);
+int createClientSocket(const std::string &serverAddress, uint16_t serverPort);
 
 int main(int argc, char **argv) {
+
+    // prevent send() from silently assasinating the program with a SIGPIPE when connection is closed
+    // seriously, who thought this was a good idea?
+    signal(SIGPIPE, SIG_IGN);
+
+    int sockfd = createClientSocket("127.0.0.1", defaultServerPort);
+    if(sockfd == -1) {
+        perror("Failed to connect to server"); 
+        return EXIT_FAILURE;
+    }
+
+    MessageSocket server(sockfd);
+
+    while(server.isConnected()) {
+        std::string line;
+        std::getline(std::cin, line);
+        if(line.empty())
+            break;
+
+        TxBuffer request;
+        request << line;
+        server.sendMessage(request);
+
+        while(true) {
+
+            server.update();
+
+            if(!server.isConnected()) {
+                std::cout << "Server disconnected." << std::endl;
+                break;
+            }
+
+            if(server.hasMessage()) {
+                RxBuffer response = server.receiveMessage();
+                std::string recvLine;
+                response >> recvLine;
+                std:: cout << "Got response: " << recvLine << std::endl;
+                break;
+            }
+        }
+    }
     
-    // Initialize GLFW
+    /*// Initialize GLFW
     if(!glfwInit()) {
         printGlfwError("Failed to initialize GLFW");
         return EXIT_FAILURE;
@@ -71,7 +120,7 @@ int main(int argc, char **argv) {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
-    }
+    }*/
 
     return EXIT_SUCCESS;
 }
@@ -80,4 +129,26 @@ void printGlfwError(const std::string &message, std::ostream &out) {
     const char *errorDescription;
     int errorCode = glfwGetError(&errorDescription);
     out << message << " (GLFW error code " << errorCode << ": " << errorDescription << ")" << std::endl;
+}
+
+int createClientSocket(const std::string &serverAddress, uint16_t serverPort) {
+
+    sockaddr_in sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sin_addr.s_addr = inet_addr(serverAddress.c_str());
+    sa.sin_port = htons(serverPort);
+    sa.sin_family = AF_INET;
+
+    int sockfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(sockfd == -1)
+        return -1;
+    
+    if(connect(sockfd, (sockaddr*)(&sa), sizeof sa) == -1) {
+        auto old_errno = errno;
+        close(sockfd);
+        errno = old_errno;
+        return -1;
+    }
+
+    return sockfd;
 }
