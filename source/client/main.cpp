@@ -17,10 +17,106 @@
 #include <network/protocol.h>
 #include <clientlogin.h>
 
+class NFClientProtocolEntity : public NFProtocolEntity {
+    private:
+    bool loggedIn = false;
+
+    public:
+
+    NFClientProtocolEntity(int sockfd) : NFProtocolEntity(sockfd) {}
+
+    void onInit() override {
+        blacklist = {MessageType::LOGIN_REQUEST, MessageType::ECHO};
+        whitelist = {MessageType::VERSION};
+        sendVersionHandshake(applicationVersion);
+        setTimeout(5s);
+    }
+
+    void attemptLogin() {
+        std::cout << "Enter username: ";
+        LoginRequest credentials;
+        std::getline(std::cin, credentials.username);
+        sendLoginRequest(credentials);
+        setTimeout(5s);
+    }
+
+    void onVersionHandshake(const Version &version) override {
+
+        blacklist.insert(MessageType::VERSION);
+        whitelist = {MessageType::LOGIN_RESPONSE};
+
+        if(applicationVersion.isCompatibleWith(version)) {
+            std::cerr << "Succesfully connected to server." << std::endl;
+            attemptLogin();
+        } else {
+            std::cerr << "Error: mismatched client/server version." << std::endl;
+            halt();
+        }
+    }
+
+    void onLoginResponse(LoginResponse r) override {
+        switch(r) {
+
+            case LoginResponse::OK: 
+                std::cerr << "Login succesful!" << std::endl;
+                whitelist.clear();
+                blacklist.insert(MessageType::LOGIN_RESPONSE);
+                loggedIn = true;
+                break;
+
+            case LoginResponse::E_ALREADY_LOGGED_IN:
+                std::cerr << "Error: user is already logged in." << std::endl;
+                attemptLogin();
+                break;
+
+            default:
+                std::cerr << "Unknown login error." << std::endl;
+                halt();
+                break;
+        }
+    }
+
+    void onAlertRequest(const AlertRequest &r) override {
+        std::cerr << "ALERT: " << r.message << std::endl;
+    }
+
+    void onUpdate(const Duration &dt) override {
+        if(loggedIn) {
+            std::string line;
+            std::getline(std::cin, line);
+            if(line == "exit")
+                halt();
+            else {
+                EchoRequest request;
+                request.message = line;
+                sendEchoRequest(request);
+                setTimeout(5s);
+            }
+        }
+    }
+
+    void onProtocolError(const ProtocolError &e) override {
+        std::cerr << "Protocol error: " << e.what() << std::endl;
+        halt();
+    }
+
+    void onTimeout() override {
+        std::cerr << "Connection timed out." << std::endl;
+        halt();
+    }
+
+    void onDisconnect() override {
+        std::cerr << "Connection closed by remote host." << std::endl;
+        halt();
+    }
+};
+
 void printGlfwError(const std::string &message, std::ostream &out = std::cerr);
 int createClientSocket(const std::string &serverAddress, uint16_t serverPort);
 
 int main(int argc, char **argv) {
+
+    TimePoint t0 = Clock::now();
 
     int sockfd = createClientSocket("127.0.0.1", defaultServerPort);
     if(sockfd == -1) {
@@ -28,78 +124,17 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    MessageSocket server(sockfd);
+    NFClientProtocolEntity entity(sockfd);
+    entity.onInit();
 
-    try {
-        if(performVersionHandshake(server, 5s)) {
-            std::cerr << "Succesfully connected to server." << std::endl;
-        } else {
-            std::cerr << "Error: mismatched client/server version." << std::endl;
-            return EXIT_FAILURE;
-        }
-    } catch(const ProtocolError &) {
-        std::cerr << "Error: connected to wrong application." << std::endl;
-        return EXIT_FAILURE;
-    } catch(const TimeoutError &) {
-        std::cerr << "Error: connection timed out." << std::endl;
-        return EXIT_FAILURE;
-    }
+    while(entity.isRunning()) {
 
-    try {
+        TimePoint t1 = Clock::now();
+        Duration dt = t1 - t0;
+        t0 = t1;
 
-        bool loggedIn = false;
-        while(!loggedIn) {
-
-            std::cout << "Enter username: ";
-            LoginRequest credentials;
-            std::cin >> credentials.username;
-
-            switch(tryLogin(server, credentials)) {
-                case LoginResponse::OK:
-                    loggedIn = true;
-                    std::cout << "Login succesful" << std::endl;
-                    break;
-                case LoginResponse::E_ALREADY_LOGGED_IN:
-                    std::cout << "Login failed: this user is already logged in." << std::endl;
-                    break;
-
-            }
-        }
-    } catch (const ProtocolError &e) {
-        std::cerr << "Protocol error: " << e.what() << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    std::string dummy;
-    std::getline(std::cin, dummy);
-
-    while(server.isConnected()) {
-        std::string line;
-        std::getline(std::cin, line);
-        if(line.empty())
-            break;
-
-        TxBuffer request;
-        request << line;
-        server.sendMessage(request);
-
-        while(true) {
-
-            server.update();
-
-            if(!server.isConnected()) {
-                std::cout << "Server disconnected." << std::endl;
-                break;
-            }
-
-            if(server.hasMessage()) {
-                RxBuffer response = server.receiveMessage();
-                std::string recvLine;
-                response >> recvLine;
-                std:: cout << "Got response: " << recvLine << std::endl;
-                break;
-            }
-        }
+        entity.runNetworkEvents();
+        entity.onUpdate(dt);
     }
     
     /*// Initialize GLFW

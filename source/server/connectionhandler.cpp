@@ -38,7 +38,9 @@ void handleConnection(int sockfd, Server *server) {
 
         while(client.hasMessage()) {
             RxBuffer request = client.receiveMessage();
+            request.read<MessageType>();
             TxBuffer response;
+            response << MessageType::ALERT;
             response.pushNetworkOrder(request.ptr(), request.size());
             client.sendMessage(response);
         }
