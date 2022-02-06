@@ -3,21 +3,6 @@
 #include <util/version.h>
 #include <util/time.h>
 
-ProtocolError::ProtocolError(const std::string &what) : std::runtime_error(what) {}
-
-RxBuffer &operator>>(RxBuffer &rx, MessageType &type) {
-    uint32_t value;
-    rx >> value;
-    if(value > 0 && value < static_cast<uint32_t>(MessageType::COUNT))
-        type = static_cast<MessageType>(value);
-    else
-        type = MessageType::UNKNOWN;
-    return rx;
-}
-TxBuffer &operator<<(TxBuffer &tx, const MessageType &type) {
-    return (tx << static_cast<uint32_t>(type));
-}
-
 bool performVersionHandshake(MessageSocket &s, const Duration &timeout) {
 
     TxBuffer request;
@@ -42,7 +27,36 @@ bool performVersionHandshake(MessageSocket &s, const Duration &timeout) {
             throw ProtocolError("Response too long.");
 
         return applicationVersion.isCompatibleWith(remoteVersion);
+        
     } catch(const std::out_of_range &) {
         throw ProtocolError("Response too short.");
     }
 }
+
+
+
+RxBuffer &operator>>(RxBuffer &rx, LoginRequest &request) {
+    return (rx >> request.username);
+}
+TxBuffer &operator<<(TxBuffer &tx, const LoginRequest &request) {
+    return (tx << request.username);
+}
+
+ProtocolError::ProtocolError(const std::string &what) : std::runtime_error(what) {}
+
+#define DEFINE_ENUM_SERDE(Enum) \
+    RxBuffer &operator>>(RxBuffer &rx, Enum &enumValue) { \
+        uint32_t rawValue; \
+        rx >> rawValue; \
+        if(rawValue >= 0 && rawValue < static_cast<uint32_t>(Enum::COUNT)) \
+            enumValue = static_cast<Enum>(rawValue); \
+        else \
+            throw ProtocolError("Invalid enum value."); \
+        return rx; \
+    } \
+    TxBuffer &operator<<(TxBuffer &tx, const Enum &enumValue) { \
+        return (tx << static_cast<uint32_t>(enumValue)); \
+    }
+
+DEFINE_ENUM_SERDE(MessageType)
+DEFINE_ENUM_SERDE(LoginResponse)

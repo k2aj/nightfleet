@@ -2,7 +2,6 @@
 
 #include <cassert>
 #include <system_error>
-#include <thread>
 
 #include <unistd.h>
 #include <sys/socket.h>
@@ -103,7 +102,7 @@ void MessageSocket::waitForMessage(const Duration &timeout) {
         update();
         if(hasMessage())
             return;
-        std::this_thread::sleep_for(10ms);
+        sleep(10ms);
     }
     throw TimeoutError();
 }

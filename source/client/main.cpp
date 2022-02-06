@@ -15,6 +15,7 @@
 #include <network/defaults.h>
 #include <network/message.h>
 #include <network/protocol.h>
+#include <clientlogin.h>
 
 void printGlfwError(const std::string &message, std::ostream &out = std::cerr);
 int createClientSocket(const std::string &serverAddress, uint16_t serverPort);
@@ -43,6 +44,34 @@ int main(int argc, char **argv) {
         std::cerr << "Error: connection timed out." << std::endl;
         return EXIT_FAILURE;
     }
+
+    try {
+
+        bool loggedIn = false;
+        while(!loggedIn) {
+
+            std::cout << "Enter username: ";
+            LoginRequest credentials;
+            std::cin >> credentials.username;
+
+            switch(tryLogin(server, credentials)) {
+                case LoginResponse::OK:
+                    loggedIn = true;
+                    std::cout << "Login succesful" << std::endl;
+                    break;
+                case LoginResponse::E_ALREADY_LOGGED_IN:
+                    std::cout << "Login failed: this user is already logged in." << std::endl;
+                    break;
+
+            }
+        }
+    } catch (const ProtocolError &e) {
+        std::cerr << "Protocol error: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    std::string dummy;
+    std::getline(std::cin, dummy);
 
     while(server.isConnected()) {
         std::string line;

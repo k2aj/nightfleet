@@ -14,3 +14,5 @@ class TimeoutError : public std::runtime_error {
     TimeoutError();
     TimeoutError(const std::string &what);
 };
+
+void sleep(const Duration &duration);

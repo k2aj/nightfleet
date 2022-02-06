@@ -14,15 +14,9 @@
 
 #include <scope_guard.h>
 #include <network/defaults.h>
-#include <network/message.h>
-#include <network/protocol.h>
 #include <util/time.h>
-
-enum class ServerStatus {
-    RUNNING,
-    SLOW_SHUTDOWN,
-    FAST_SHUTDOWN
-};
+#include <server.h>
+#include <connectionhandler.h>
 
 volatile sig_atomic_t caughtSignal = 0;
 void signalHandler(int signum) {
@@ -30,7 +24,6 @@ void signalHandler(int signum) {
 }
 
 int createServerSocket(uint16_t port, int maxQueuedConnectionRequests = 16);
-void handleSocket(int sock, const std::atomic<ServerStatus> *serverStatus);
 
 int main(int argc, char **argv) {
 
@@ -45,7 +38,8 @@ int main(int argc, char **argv) {
     scope_exit(close(serverSocket));
 
     std::vector<std::future<void>> threads;
-    std::atomic<ServerStatus> serverStatus = ServerStatus::RUNNING;
+
+    Server server;
 
     std::cerr << "Starting main loop" << std::endl;
     while(true) {
@@ -55,12 +49,13 @@ int main(int argc, char **argv) {
         int newSocket = accept(serverSocket, reinterpret_cast<sockaddr*>(&connectingAddress), &connectingAddressSize);
 
         if(newSocket != -1) {
-            std::cerr << "Accepted new connection (sockfd=" << newSocket << ")" << std::endl;
-            threads.push_back(std::async(std::launch::async, &handleSocket, newSocket, &serverStatus));
+            threads.push_back(std::async(std::launch::async, &handleConnection, newSocket, &server));
         } else if(errno == EAGAIN || errno == EWOULDBLOCK) {
-            std::this_thread::sleep_for(10ms);
+            // prevent server from hogging CPU when not handling new connections
+            sleep(10ms);
         } else {
             perror("Failed to accept socket, shutting down.");
+            server.requestShutdown();
         }
 
         if(auto signum = caughtSignal) {
@@ -70,8 +65,8 @@ int main(int argc, char **argv) {
                 static_cast<int>(caughtSignal), strsignal(caughtSignal)
             );
 
-            if(signum == SIGQUIT) serverStatus = ServerStatus::SLOW_SHUTDOWN;
-            else serverStatus = ServerStatus::FAST_SHUTDOWN;
+            if(signum == SIGQUIT) server.requestShutdown();
+            else server.requestFastShutdown();
 
             // wait for child threads to complete
             for(auto &child : threads)
@@ -82,33 +77,6 @@ int main(int argc, char **argv) {
     }
 
     return EXIT_SUCCESS;
-}
-
-void handleSocket(int sockfd, const std::atomic<ServerStatus> *serverStatus) {
-
-    MessageSocket client(sockfd);
-
-    if(!performVersionHandshake(client, 5s))
-        return;
-
-    while(
-        client.isConnected() &&
-        serverStatus->load() == ServerStatus::RUNNING
-    ) {
-
-        client.update();
-
-        while(client.hasMessage()) {
-            RxBuffer request = client.receiveMessage();
-            TxBuffer response;
-            response.pushNetworkOrder(request.ptr(), request.size());
-            client.sendMessage(response);
-        }
-
-        std::this_thread::sleep_for(10ms);
-    }
-
-    //socket cleanup handled by MessageSocket
 }
 
 int createServerSocket(uint16_t serverPort, int maxQueuedConnectionRequests) {
