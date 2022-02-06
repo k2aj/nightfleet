@@ -2,11 +2,10 @@
 
 #include <cstdint>
 #include <vector>
-#include <chrono>
 
 #include <network/txbuffer.h>
 #include <network/rxbuffer.h>
-
+#include <util/time.h>
 
 class MessageSocket {
 
@@ -27,6 +26,7 @@ class MessageSocket {
     bool hasMessage();
     RxBuffer receiveMessage();
     void sendMessage(const TxBuffer &message);
+    void waitForMessage(const Duration &timeout);
 
     private:
     TxBuffer txBuffer;

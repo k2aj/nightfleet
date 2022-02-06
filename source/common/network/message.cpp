@@ -2,11 +2,10 @@
 
 #include <cassert>
 #include <system_error>
+#include <thread>
 
 #include <unistd.h>
 #include <sys/socket.h>
-
-#include <iostream>
 
 typedef uint32_t msg_size_t;
 
@@ -94,4 +93,17 @@ void MessageSocket::sendMessage(const TxBuffer &message) {
         return;
     txBuffer << static_cast<msg_size_t>(message.size());
     txBuffer.pushNetworkOrder(message.ptr(), message.size());
+}
+
+void MessageSocket::waitForMessage(const Duration &timeout) {
+
+    auto deadline = Clock::now() + timeout;
+
+    while(Clock::now() < deadline) {
+        update();
+        if(hasMessage())
+            return;
+        std::this_thread::sleep_for(10ms);
+    }
+    throw TimeoutError();
 }

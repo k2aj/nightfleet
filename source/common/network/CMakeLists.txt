@@ -3,4 +3,5 @@ target_sources(nfcommon PRIVATE
     txbuffer.cpp
     rxbuffer.cpp
     nbuffer.cpp
+    protocol.cpp
 )

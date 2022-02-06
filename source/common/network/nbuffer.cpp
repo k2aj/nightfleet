@@ -1,5 +1,6 @@
 #include <network/nbuffer.h>
 
+#include <stdexcept>
 #include <cassert>
 #include <cstring>
 
@@ -14,7 +15,8 @@ size_t NetworkBuffer::size() const {
     return store.size() - position;
 }
 void NetworkBuffer::pop(size_t numBytes) {
-    assert(position + numBytes <= store.size());
+    if(position + numBytes > store.size())
+        throw std::out_of_range("Attempting to pop more bytes from buffer than available.");
     position += numBytes;
 }
 void NetworkBuffer::maybeCompact() {
@@ -31,6 +33,7 @@ size_t NetworkBuffer::getPosition() const {
     return position;
 }
 void NetworkBuffer::setPosition(size_t newPosition) {
-    assert(newPosition < store.size());
+    if(newPosition >= store.size())
+        throw std::out_of_range("Attempting to setPosition beyond buffer bounds.");
     position = newPosition;
 }

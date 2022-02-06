@@ -14,6 +14,7 @@
 #include <scope_guard.h>
 #include <network/defaults.h>
 #include <network/message.h>
+#include <network/protocol.h>
 
 void printGlfwError(const std::string &message, std::ostream &out = std::cerr);
 int createClientSocket(const std::string &serverAddress, uint16_t serverPort);
@@ -27,6 +28,21 @@ int main(int argc, char **argv) {
     }
 
     MessageSocket server(sockfd);
+
+    try {
+        if(performVersionHandshake(server, 5s)) {
+            std::cerr << "Succesfully connected to server." << std::endl;
+        } else {
+            std::cerr << "Error: mismatched client/server version." << std::endl;
+            return EXIT_FAILURE;
+        }
+    } catch(const ProtocolError &) {
+        std::cerr << "Error: connected to wrong application." << std::endl;
+        return EXIT_FAILURE;
+    } catch(const TimeoutError &) {
+        std::cerr << "Error: connection timed out." << std::endl;
+        return EXIT_FAILURE;
+    }
 
     while(server.isConnected()) {
         std::string line;

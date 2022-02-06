@@ -11,12 +11,12 @@
 #include <vector>
 #include <atomic>
 #include <thread>
-#include <chrono>
-using namespace std::chrono_literals;
 
 #include <scope_guard.h>
 #include <network/defaults.h>
 #include <network/message.h>
+#include <network/protocol.h>
+#include <util/time.h>
 
 enum class ServerStatus {
     RUNNING,
@@ -85,7 +85,11 @@ int main(int argc, char **argv) {
 }
 
 void handleSocket(int sockfd, const std::atomic<ServerStatus> *serverStatus) {
+
     MessageSocket client(sockfd);
+
+    if(!performVersionHandshake(client, 5s))
+        return;
 
     while(
         client.isConnected() &&

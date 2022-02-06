@@ -2,27 +2,37 @@
 
 #include <cstring>
 #include <endian.h>
+#include <stdexcept>
 
 // For unsigned types: memcpy and byteswap if necessary
+// also check bounds on every read to prevent exploits
 
 RxBuffer &operator>>(RxBuffer &rx, uint8_t &result) {
+    if(rx.size() < sizeof(result))
+        throw std::out_of_range("");
     memcpy(&result, rx.ptr(), sizeof(result));
     rx.pop(sizeof(result));
     return rx;
 }
 RxBuffer &operator>>(RxBuffer &rx, uint16_t &result) {
+    if(rx.size() < sizeof(result))
+        throw std::out_of_range("");
     memcpy(&result, rx.ptr(), sizeof(result));
     result = be16toh(result);
     rx.pop(sizeof(result));
     return rx;
 }
 RxBuffer &operator>>(RxBuffer &rx, uint32_t &result) {
+    if(rx.size() < sizeof(result))
+        throw std::out_of_range("");
     memcpy(&result, rx.ptr(), sizeof(result));
     result = be32toh(result);
     rx.pop(sizeof(result));
     return rx;
 }
 RxBuffer &operator>>(RxBuffer &rx, uint64_t &result) {
+    if(rx.size() < sizeof(result))
+        throw std::out_of_range("");
     memcpy(&result, rx.ptr(), sizeof(result));
     result = be64toh(result);
     rx.pop(sizeof(result));
