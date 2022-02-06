@@ -1,6 +1,5 @@
 #include <iostream>
 
-#include <csignal>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -20,10 +19,6 @@ void printGlfwError(const std::string &message, std::ostream &out = std::cerr);
 int createClientSocket(const std::string &serverAddress, uint16_t serverPort);
 
 int main(int argc, char **argv) {
-
-    // prevent send() from silently assasinating the program with a SIGPIPE when connection is closed
-    // seriously, who thought this was a good idea?
-    signal(SIGPIPE, SIG_IGN);
 
     int sockfd = createClientSocket("127.0.0.1", defaultServerPort);
     if(sockfd == -1) {

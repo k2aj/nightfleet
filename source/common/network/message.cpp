@@ -45,7 +45,7 @@ void MessageSocket::update() {
 
         // Attempt to send data
     if(txBuffer.size() > 0) {
-        ssize_t numSentBytes = send(sockfd, txBuffer.ptr(), static_cast<ssize_t>(txBuffer.size()), MSG_DONTWAIT);
+        ssize_t numSentBytes = send(sockfd, txBuffer.ptr(), static_cast<ssize_t>(txBuffer.size()), MSG_DONTWAIT|MSG_NOSIGNAL);
         if(numSentBytes > 0) {
             txBuffer.pop(static_cast<size_t>(numSentBytes));
             txBuffer.maybeCompact();

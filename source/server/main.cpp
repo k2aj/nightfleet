@@ -37,10 +37,6 @@ int main(int argc, char **argv) {
     std::cerr << "Registering signal handlers." << std::endl;
     signal(SIGINT, &signalHandler);
     signal(SIGQUIT, &signalHandler);
-    // prevent send() from silently assasinating the program with a SIGPIPE when connection is closed
-    // seriously, who thought this was a good idea?
-    signal(SIGPIPE, SIG_IGN);
-
 
     std::cerr << "Creating server socket on port " << defaultServerPort << std::endl;
     int serverSocket = createServerSocket(defaultServerPort);
