@@ -17,10 +17,11 @@
 #include <network/defaults.h>
 #include <network/message.h>
 #include <network/protocol.h>
-#include <clientlogin.h>
 #include <engine/content.h>
 #include <engine/map.h>
 #include <engine/game.h>
+#include <graphics.h>
+#include <dgl/debug.h>
 
 class NFClientProtocolEntity : public NFProtocolEntity {
     private:
@@ -38,9 +39,14 @@ class NFClientProtocolEntity : public NFProtocolEntity {
     const Map *selectedMap = nullptr;
     char enteredGameID[32] = {'\0'};
 
+    SpriteRenderer renderer;
+    AtlasArea imgFighter;
+
     public:
 
-    NFClientProtocolEntity(int sockfd) : NFProtocolEntity(sockfd) {}
+    NFClientProtocolEntity(int sockfd) : NFProtocolEntity(sockfd) {
+        imgFighter = renderer.loadImage("../textures/units/fighter.png");
+    }
 
     void onVersionHandshake(const Version &version) override {
 
@@ -171,12 +177,20 @@ class NFClientProtocolEntity : public NFProtocolEntity {
         }
     }
 
+    void render() {
+        renderer.clear();
+        renderer.drawImage(imgFighter, glm::vec2(0), glm::vec2(0.25f));
+        renderer.render(glm::mat4(1));
+    }
+
     void onFullSync(const Game &gameState) override {
         std::cerr << "Received full sync from server!";
-        if(guiFsm == WAITING_ROOM) {
-            //todo start the game
-            guiFsm = INGAME;
-        }
+        //todo start the game
+        guiFsm = INGAME;
+    }
+
+    void onLeaveGameRequest(const LeaveGameRequest &) override {
+        guiFsm = GAME_LOBBY;
     }
 
     void onProtocolError(const ProtocolError &e) override {
@@ -217,7 +231,7 @@ int main(int argc, char **argv) {
     scope_exit(glfwTerminate());
 
     // Create window
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     GLFWwindow *window = glfwCreateWindow(1024, 768, "Night Fleet client", nullptr, nullptr);
     if(window == nullptr) {
@@ -232,6 +246,7 @@ int main(int argc, char **argv) {
         std::cerr << "Failed to load OpenGL." << std::endl;
         return EXIT_FAILURE;
     }
+    initOpenGLDebugOutput(std::cerr);
 
     // Initialize ImGui
     IMGUI_CHECKVERSION();
@@ -280,6 +295,8 @@ int main(int argc, char **argv) {
 
         glClearColor(1,1,0,1);
         glClear(GL_COLOR_BUFFER_BIT);
+
+        entity.render();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

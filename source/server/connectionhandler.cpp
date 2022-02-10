@@ -122,6 +122,8 @@ class NFServerProtocolEntity : public NFProtocolEntity {
     void onLeaveGameRequest(const LeaveGameRequest &request) override {
         if(fsm == AWAITING_GAME || fsm == INGAME) {
             server.gameManager.leaveGame(username);
+            if(fsm == INGAME)
+                sendLeaveGameRequest({});
             fsm = IDLE;
         } else
             throw ProtocolError("Unexpected LeaveGameRequest");
