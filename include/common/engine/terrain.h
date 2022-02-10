@@ -3,11 +3,8 @@
 #include <string>
 #include <engine/registry.h>
 
-class TerrainType {
+class TerrainType : public ContentType<TerrainType> {
     public:
-    const std::string id;
 
     TerrainType(const std::string &id);
-
-    static Registry<TerrainType> registry;
 };

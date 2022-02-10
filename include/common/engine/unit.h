@@ -3,13 +3,14 @@
 #include <string>
 #include <glm/vec2.hpp>
 #include <engine/registry.h>
+#include <network/rxbuffer.h>
+#include <network/txbuffer.h>
 
 // workaround for not being able to #include <common/engine/game.h>
 class Game;
 
-class UnitType {
+class UnitType : public ContentType<UnitType> {
     public:
-    const std::string id;
 
     // unit stats
     int maxHealth = 10,
@@ -19,18 +20,21 @@ class UnitType {
         actionPointsPerTurn = 1;
 
     UnitType(const std::string &id);
-
-    static Registry<UnitType> registry;
 };
 
 struct Unit {
 
-    const UnitType *type;
+    UnitType *type;
     int player, health, movementPoints = 0, actionPoints = 0;
     glm::ivec2 position{0};
 
-    Unit(const UnitType &type, int player);
+    Unit();
+    Unit(UnitType &type, int player);
 
     bool isAlive() const;
     void update(Game &game);
 };
+
+RxBuffer &operator>>(RxBuffer &rx, Unit &unit);
+TxBuffer &operator<<(TxBuffer &tx, const Unit &unit);
+

@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <set>
+#include <map>
 #include <string>
 
 #include <network/nbuffer.h>
@@ -32,5 +34,21 @@ TxBuffer &operator<<(TxBuffer &tx, const std::vector<T> &value) {
     tx << static_cast<uint32_t>(value.size());
     for(const auto &element : value)
         tx << element;
+    return tx;
+}
+
+template<typename T>
+TxBuffer &operator<<(TxBuffer &tx, const std::set<T> &value) {
+    tx << static_cast<uint32_t>(value.size());
+    for(const auto &element : value)
+        tx << element;
+    return tx;
+}
+
+template<typename K, typename V>
+TxBuffer &operator<<(TxBuffer &tx, const std::map<K,V> &value) {
+    tx << static_cast<uint32_t>(value.size());
+    for(const auto &entry : value)
+        tx << entry.first << entry.second;
     return tx;
 }

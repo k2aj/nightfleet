@@ -79,9 +79,6 @@ TxBuffer &operator<<(TxBuffer &tx, const GameIncrementalSync &s) {
     return tx;
 }
 
-
-ProtocolError::ProtocolError(const std::string &what) : std::runtime_error(what) {}
-
 #define DEFINE_ENUM_SERDE(Enum) \
     RxBuffer &operator>>(RxBuffer &rx, Enum &enumValue) { \
         uint32_t rawValue; \

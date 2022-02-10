@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <set>
+#include <map>
 #include <string>
 
 #include <network/nbuffer.h>
@@ -58,5 +60,25 @@ RxBuffer &operator>>(RxBuffer &rx, std::vector<T> &result) {
     result.reserve(vectorSize);
     for(uint32_t i=0; i<vectorSize; ++i)
         result.push_back(rx.read<T>());
+    return rx;
+}
+
+template<typename T>
+RxBuffer &operator>>(RxBuffer &rx, std::set<T> &result) {
+    uint32_t setSize = rx.read<uint32_t>();
+    result.clear();
+    for(uint32_t i=0; i<setSize; ++i)
+        result.insert(rx.read<T>());
+    return rx;
+}
+
+template<typename K, typename V>
+RxBuffer &operator>>(RxBuffer &rx, std::map<K,V> &result) {
+    uint32_t mapSize = rx.read<uint32_t>();
+    result.clear();
+    for(uint32_t i=0; i<mapSize; ++i) {
+        K key = rx.read<K>();
+        result[key] = rx.read<V>();
+    }
     return rx;
 }

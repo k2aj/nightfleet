@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <set>
+#include <mutex>
 
 #include <glm/vec2.hpp>
 
@@ -18,23 +19,33 @@ struct IVec2Comparator {
     }
 };
 
+typedef int64_t GameID;
+
 class Game {
+
+    friend RxBuffer &operator>>(RxBuffer &rx, Game &game);
+    friend TxBuffer &operator<<(TxBuffer &tx, const Game &game);
 
     public:
 
-    Game(const Map &map);
+    Game();
+    Game(GameID id, const Map &map);
 
     int playerCount() const;
     int currentPlayer() const;
+    GameID id() const;
     std::shared_ptr<const Unit> unitAt(const glm::ivec2 &position) const;
     std::shared_ptr<Unit> unitAt(const glm::ivec2 &position);
 
     void spawn(std::shared_ptr<Unit> unit);
     void endTurn();
 
+    std::mutex mutex;
+
     private:
 
     int _currentPlayer = 0;
+    GameID _id;
 
     // we don't store a Map because maybe the terrain will get modified during the game
     Field<const TerrainType *> terrain;
@@ -44,3 +55,6 @@ class Game {
 
     std::vector<std::set<glm::ivec2, IVec2Comparator>> playerUnitPositions;
 };
+
+RxBuffer &operator>>(RxBuffer &rx, Game &game);
+TxBuffer &operator<<(TxBuffer &tx, const Game &game);

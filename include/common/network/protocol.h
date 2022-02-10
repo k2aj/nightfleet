@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <set>
 
+#include <network/exceptions.h>
 #include <network/message.h>
 #include <network/rxbuffer.h>
 #include <network/txbuffer.h>
@@ -17,14 +18,6 @@
  */
 [[nodiscard]]
 bool performVersionHandshake(MessageSocket &, const Duration &timeout);
-
-/** Thrown when the other side of communication does not obey 
- *  the application layer communication protocol. 
- */
-class ProtocolError : public std::runtime_error {
-    public:
-    ProtocolError(const std::string &what);
-};
 
 enum class MessageType : uint32_t {
     UNKNOWN = 0,

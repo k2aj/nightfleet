@@ -1,10 +1,11 @@
 #include <engine/unit.h>
 
 UnitType::UnitType(const std::string &id) :
-    id(id)
+    ContentType(id)
 {}
 
-Unit::Unit(const UnitType &type, int player) : 
+Unit::Unit() {}
+Unit::Unit(UnitType &type, int player) : 
     player(player),
     type(&type),
     health(type.maxHealth)
@@ -17,4 +18,11 @@ bool Unit::isAlive() const {
 void Unit::update(Game &game) {
     actionPoints = type->actionPointsPerTurn;
     movementPoints = type->movementPointsPerTurn;
+}
+
+RxBuffer &operator>>(RxBuffer &rx, Unit &unit) {
+    return (rx >> unit.type >> unit.player >> unit.health >> unit.movementPoints >> unit.actionPoints >> unit.position.x >> unit.position.y);
+}
+TxBuffer &operator<<(TxBuffer &tx, const Unit &unit) {
+    return (tx << unit.type << unit.player << unit.health << unit.movementPoints << unit.actionPoints << unit.position.x << unit.position.y);
 }

@@ -2,5 +2,5 @@
 #include <vector>
 
 TerrainType::TerrainType(const std::string &id) : 
-    id(id)
+    ContentType(id)
 {}
