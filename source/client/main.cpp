@@ -12,11 +12,15 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include <colors.h>
 #include <scope_guard.h>
 #include <network/defaults.h>
 #include <network/message.h>
 #include <network/protocol.h>
 #include <clientlogin.h>
+#include <engine/content.h>
+#include <engine/map.h>
+#include <engine/game.h>
 
 class NFClientProtocolEntity : public NFProtocolEntity {
     private:
@@ -24,22 +28,19 @@ class NFClientProtocolEntity : public NFProtocolEntity {
         DISCONNECTED,
         LOGIN_SCREEN,
         GAME_LOBBY,
+        WAITING_ROOM,
         INGAME
     } guiFsm = DISCONNECTED;
 
     char username[32] = {'\0'}, password[32] = {'\0'};
     bool waitingForLoginResponse = false;
     std::string loginRejectionReason;
+    const Map *selectedMap = nullptr;
+    char enteredGameID[32] = {'\0'};
 
     public:
 
     NFClientProtocolEntity(int sockfd) : NFProtocolEntity(sockfd) {}
-
-    void onInit() override {
-        whitelist = {MessageType::VERSION};
-        sendVersionHandshake(applicationVersion);
-        setTimeout(5s);
-    }
 
     void onVersionHandshake(const Version &version) override {
 
@@ -85,18 +86,6 @@ class NFClientProtocolEntity : public NFProtocolEntity {
     }
 
     void onUpdate(const Duration &dt) override {
-        /*if(guiFsm == GAME_LOBBY) {
-            std::string line;
-            std::getline(std::cin, line);
-            if(line == "exit")
-                halt();
-            else {
-                EchoRequest request;
-                request.message = line;
-                sendEchoRequest(request);
-                setTimeout(5s);
-            }
-        }*/
 
         switch(guiFsm) {
 
@@ -121,16 +110,56 @@ class NFClientProtocolEntity : public NFProtocolEntity {
                     loginRejectionReason = "";
                 }
                 if(!loginRejectionReason.empty())
-                    ImGui::TextColored(ImVec4(1,0,0,1), loginRejectionReason.c_str());
+                    ImGui::TextColored(Colors::red, loginRejectionReason.c_str());
 
                 ImGui::End();
             }
             break;
 
-            case GAME_LOBBY:{
+            case GAME_LOBBY: {
+
                 ImGui::Begin("Lobby");
-                ImGui::Button("Join radnom game");
-                ImGui::Button("Host a new game");
+
+                ImGui::InputText("Game ID", enteredGameID, sizeof enteredGameID);
+                int64_t gameID = atoll(enteredGameID);
+
+                ImGui::SameLine();
+
+                if(
+                    (gameID == 0 && strlen(enteredGameID) > 0) || //atoll failed
+                    gameID < 0                                    //negative IDs are illegal
+                )
+                    ImGui::TextColored(Colors::red, "Invalid game ID!");
+                else if(ImGui::Button("Join game")) {
+                    sendJoinGameRequest({gameID});
+                    guiFsm = WAITING_ROOM;
+                }
+
+                ImGui::Text("Advanced");
+                if(ImGui::BeginListBox("Map")) {
+                    for(int i=0; i<Map::registry.size(); ++i) {
+                        const Map *map = &Map::registry[i];
+                        if(ImGui::Selectable(map->id.c_str(), selectedMap == map))
+                            selectedMap = map;
+                    }
+                    ImGui::EndListBox();
+                }
+                if(ImGui::Button("Host a new game") && selectedMap != nullptr) {
+                    sendHostGameRequest({selectedMap});
+                    guiFsm = WAITING_ROOM;
+                }
+
+                ImGui::End();
+            }
+            break;
+
+            case WAITING_ROOM: {
+                ImGui::Begin("Info");
+                ImGui::Text("Waiting for other players to join.");
+                if(ImGui::Button("Leave game")) {
+                    sendLeaveGameRequest({});
+                    guiFsm = GAME_LOBBY;
+                }
                 ImGui::End();
             }
             break;
@@ -139,6 +168,14 @@ class NFClientProtocolEntity : public NFProtocolEntity {
 
             }
             break;
+        }
+    }
+
+    void onFullSync(const Game &gameState) override {
+        std::cerr << "Received full sync from server!";
+        if(guiFsm == WAITING_ROOM) {
+            //todo start the game
+            guiFsm = INGAME;
         }
     }
 
@@ -206,6 +243,9 @@ int main(int argc, char **argv) {
     scope_exit(ImGui_ImplGlfw_Shutdown());
     ImGui_ImplOpenGL3_Init("#version 330");
     scope_exit(ImGui_ImplOpenGL3_Shutdown());
+
+    // Initialize game content
+    initGameContent();
 
     // Connect to server
     // TODO this should be moved somewhere else

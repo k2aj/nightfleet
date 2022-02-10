@@ -21,7 +21,8 @@ void Unit::update(Game &game) {
 }
 
 RxBuffer &operator>>(RxBuffer &rx, Unit &unit) {
-    return (rx >> unit.type >> unit.player >> unit.health >> unit.movementPoints >> unit.actionPoints >> unit.position.x >> unit.position.y);
+    unit.type = readContentType<UnitType>(rx);
+    return (rx >> unit.player >> unit.health >> unit.movementPoints >> unit.actionPoints >> unit.position.x >> unit.position.y);
 }
 TxBuffer &operator<<(TxBuffer &tx, const Unit &unit) {
     return (tx << unit.type << unit.player << unit.health << unit.movementPoints << unit.actionPoints << unit.position.x << unit.position.y);

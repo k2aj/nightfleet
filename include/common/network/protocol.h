@@ -10,6 +10,7 @@
 #include <network/txbuffer.h>
 #include <util/time.h>
 #include <util/version.h>
+#include <engine/game.h>
 
 /** Checks if client and server application versions match.
  *  @returns true if client and server application versions are compatible with each other.
@@ -26,10 +27,13 @@ enum class MessageType : uint32_t {
     LOGIN_RESPONSE = 3,
     ECHO = 4,
     ALERT = 5,
-    JOIN_GAME = 6,
-    GAME_FULL_SYNC = 7,
-    GAME_INCREMENTAL_SYNC = 8,
-    COUNT = 9
+    HOST_GAME = 6,
+    JOIN_GAME = 7,
+    LEAVE_GAME = 8,
+    GAME_JOIN_ERROR = 9,
+    GAME_FULL_SYNC = 10,
+    GAME_INCREMENTAL_SYNC = 11,
+    COUNT = 12
 };
 
 struct LoginRequest {
@@ -50,19 +54,31 @@ struct AlertRequest {
     std::string message;
 };
 
-typedef int64_t GameID;
+//typedef int64_t GameID;
+
+struct HostGameRequest {
+    const Map *map;
+};
 
 struct JoinGameRequest {
-
     static constexpr GameID 
-        HOST_NEW = -1,
         JOIN_ANY = 0;
 
     GameID gameID = JOIN_ANY;
-
 };
 
-struct GameFullSync {};
+struct LeaveGameRequest {};
+
+enum class GameJoinError : uint32_t {
+    NO_ERROR = 0,
+    GAME_DOESNT_EXIST = 1,
+    GAME_ALREADY_RUNNING = 2,
+    SERVER_FULL = 3,
+    SERVER_SHUTTING_DOWN = 4,
+    OTHER = 5,
+    COUNT = 6
+};
+
 struct GameIncrementalSync {};
 
 #define DECLARE_SERDE(Type) \
@@ -74,11 +90,13 @@ DECLARE_SERDE(LoginRequest)
 DECLARE_SERDE(LoginResponse)
 DECLARE_SERDE(EchoRequest)
 DECLARE_SERDE(AlertRequest)
+DECLARE_SERDE(HostGameRequest)
 DECLARE_SERDE(JoinGameRequest)
-DECLARE_SERDE(GameFullSync)
+DECLARE_SERDE(LeaveGameRequest)
+DECLARE_SERDE(GameJoinError)
 DECLARE_SERDE(GameIncrementalSync)
 
-#undef DECLARE_ENUM_SERDE
+#undef DECLARE_SERDE
 
 class NFProtocolEntity {
     public:
@@ -96,7 +114,10 @@ class NFProtocolEntity {
     void sendEchoRequest(const EchoRequest &);
     void sendAlertRequest(const AlertRequest &);
     void sendJoinGameRequest(const JoinGameRequest &);
-    void sendFullSync(const GameFullSync &);
+    void sendHostGameRequest(const HostGameRequest &);
+    void sendLeaveGameRequest(const LeaveGameRequest &);
+    void sendGameJoinError(GameJoinError);
+    void sendFullSync(const Game &);
     void sendIncrementalSync(const GameIncrementalSync &);
     
     virtual void onInit();
@@ -106,8 +127,11 @@ class NFProtocolEntity {
     virtual void onLoginResponse(LoginResponse);
     virtual void onEchoRequest(const EchoRequest &);
     virtual void onAlertRequest(const AlertRequest &);
+    virtual void onHostGameRequest(const HostGameRequest &);
     virtual void onJoinGameRequest(const JoinGameRequest &);
-    virtual void onFullSync(const GameFullSync &);
+    virtual void onLeaveGameRequest(const LeaveGameRequest &);
+    virtual void onGameJoinError(GameJoinError);
+    virtual void onFullSync(const Game &);
     virtual void onIncrementalSync(const GameIncrementalSync &);
 
     virtual void onProtocolError(const ProtocolError &e) = 0;

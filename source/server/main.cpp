@@ -17,6 +17,7 @@
 #include <util/time.h>
 #include <server.h>
 #include <connectionhandler.h>
+#include <engine/content.h>
 
 volatile sig_atomic_t caughtSignal = 0;
 void signalHandler(int signum) {
@@ -40,6 +41,7 @@ int main(int argc, char **argv) {
     std::vector<std::future<void>> threads;
 
     Server server;
+    initGameContent();
 
     std::cerr << "Starting main loop" << std::endl;
     while(true) {

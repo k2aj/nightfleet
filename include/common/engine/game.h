@@ -29,18 +29,16 @@ class Game {
     public:
 
     Game();
-    Game(GameID id, const Map &map);
+    Game(GameID id, const Map &map, const std::vector<std::string> &playerUsernames);
 
     int playerCount() const;
-    int currentPlayer() const;
+    const std::string &currentPlayer() const;
     GameID id() const;
     std::shared_ptr<const Unit> unitAt(const glm::ivec2 &position) const;
     std::shared_ptr<Unit> unitAt(const glm::ivec2 &position);
 
     void spawn(std::shared_ptr<Unit> unit);
     void endTurn();
-
-    std::mutex mutex;
 
     private:
 
@@ -54,6 +52,7 @@ class Game {
     Field<std::shared_ptr<Unit>> units;
 
     std::vector<std::set<glm::ivec2, IVec2Comparator>> playerUnitPositions;
+    std::vector<std::string> playerUsernames;
 };
 
 RxBuffer &operator>>(RxBuffer &rx, Game &game);

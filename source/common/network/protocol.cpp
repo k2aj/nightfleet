@@ -56,6 +56,14 @@ TxBuffer &operator<<(TxBuffer &tx, const EchoRequest &request) {
     return (tx << request.message);
 }
 
+RxBuffer &operator>>(RxBuffer &rx, HostGameRequest &request) {\
+    request.map = readContentType<Map>(rx);
+    return rx;
+}
+TxBuffer &operator<<(TxBuffer &tx, const HostGameRequest &request) {
+    return (tx << request.map);
+}
+
 RxBuffer &operator>>(RxBuffer &rx, JoinGameRequest &request) {
     return (rx >> request.gameID);
 }
@@ -63,13 +71,13 @@ TxBuffer &operator<<(TxBuffer &tx, const JoinGameRequest &request) {
     return (tx << request.gameID);
 }
 
-// TODO fill these stubs
-RxBuffer &operator>>(RxBuffer &rx, GameFullSync &s) {
+RxBuffer &operator>>(RxBuffer &rx, LeaveGameRequest &request) {
     return rx;
 }
-TxBuffer &operator<<(TxBuffer &tx, const GameFullSync &s) {
+TxBuffer &operator<<(TxBuffer &tx, const LeaveGameRequest &request) {
     return tx;
 }
+
 
 // TODO fill these stubs
 RxBuffer &operator>>(RxBuffer &rx, GameIncrementalSync &s) {
@@ -95,6 +103,7 @@ TxBuffer &operator<<(TxBuffer &tx, const GameIncrementalSync &s) {
 
 DEFINE_ENUM_SERDE(MessageType)
 DEFINE_ENUM_SERDE(LoginResponse)
+DEFINE_ENUM_SERDE(GameJoinError)
 
 NFProtocolEntity::NFProtocolEntity(int sockfd) :
     msock(sockfd)
@@ -131,13 +140,17 @@ void NFProtocolEntity::runNetworkEvents() {
                     break; \
                 }
 
-                DISPATCH(VERSION,        Version,       onVersionHandshake)
-                DISPATCH(LOGIN_REQUEST,  LoginRequest,  onLoginRequest)
-                DISPATCH(LOGIN_RESPONSE, LoginResponse, onLoginResponse)
-                DISPATCH(ECHO,           EchoRequest,   onEchoRequest)
-                DISPATCH(ALERT,          AlertRequest,  onAlertRequest)
-                DISPATCH(GAME_FULL_SYNC, GameFullSync,  onFullSync)
-                DISPATCH(GAME_INCREMENTAL_SYNC, GameIncrementalSync, onIncrementalSync)
+                DISPATCH(VERSION,               Version,                onVersionHandshake)
+                DISPATCH(LOGIN_REQUEST,         LoginRequest,           onLoginRequest)
+                DISPATCH(LOGIN_RESPONSE,        LoginResponse,          onLoginResponse)
+                DISPATCH(ECHO,                  EchoRequest,            onEchoRequest)
+                DISPATCH(ALERT,                 AlertRequest,           onAlertRequest)
+                DISPATCH(HOST_GAME,             HostGameRequest,        onHostGameRequest)
+                DISPATCH(JOIN_GAME,             JoinGameRequest,        onJoinGameRequest)
+                DISPATCH(LEAVE_GAME,            LeaveGameRequest,       onLeaveGameRequest)
+                DISPATCH(GAME_JOIN_ERROR,       GameJoinError,          onGameJoinError)
+                DISPATCH(GAME_FULL_SYNC,        Game,                   onFullSync)
+                DISPATCH(GAME_INCREMENTAL_SYNC, GameIncrementalSync,    onIncrementalSync)
 
                 #undef DISPATCH
 
@@ -193,12 +206,22 @@ void NFProtocolEntity::sendAlertRequest(const AlertRequest &r) {
     message << MessageType::ALERT << r;
     msock.sendMessage(message);
 }
+void NFProtocolEntity::sendHostGameRequest(const HostGameRequest &r) {
+    TxBuffer message;
+    message << MessageType::HOST_GAME << r;
+    msock.sendMessage(message);
+}
 void NFProtocolEntity::sendJoinGameRequest(const JoinGameRequest &r) {
     TxBuffer message;
     message << MessageType::JOIN_GAME << r;
     msock.sendMessage(message);
 }
-void NFProtocolEntity::sendFullSync(const GameFullSync &s) {
+void NFProtocolEntity::sendLeaveGameRequest(const LeaveGameRequest &r) {
+    TxBuffer message;
+    message << MessageType::LEAVE_GAME << r;
+    msock.sendMessage(message);
+}
+void NFProtocolEntity::sendFullSync(const Game &s) {
     TxBuffer message;
     message << MessageType::GAME_FULL_SYNC << s;
     msock.sendMessage(message);
@@ -208,15 +231,27 @@ void NFProtocolEntity::sendIncrementalSync(const GameIncrementalSync &s) {
     message << MessageType::GAME_INCREMENTAL_SYNC << s;
     msock.sendMessage(message);
 }
-void NFProtocolEntity::onInit() {}
+void NFProtocolEntity::sendGameJoinError(GameJoinError error) {
+    TxBuffer message;
+    message << MessageType::GAME_JOIN_ERROR << error;
+    msock.sendMessage(message);
+}
+void NFProtocolEntity::onInit() {
+    whitelist = {MessageType::VERSION};
+    sendVersionHandshake(applicationVersion);
+    setTimeout(5s);
+}
 void NFProtocolEntity::onUpdate(const Duration &dt) {}
 void NFProtocolEntity::onVersionHandshake(const Version &) {}
 void NFProtocolEntity::onLoginRequest(const LoginRequest &) {throw ProtocolError("Unexpected LoginRequest.");}
 void NFProtocolEntity::onLoginResponse(LoginResponse) {throw ProtocolError("Unexpected LoginResponse.");}
 void NFProtocolEntity::onEchoRequest(const EchoRequest &) {throw ProtocolError("Unexpected EchoRequest.");}
 void NFProtocolEntity::onAlertRequest(const AlertRequest &) {throw ProtocolError("Unexpected EchoResponse.");}
+void NFProtocolEntity::onHostGameRequest(const HostGameRequest &) {throw ProtocolError("Unexpected HostGameRequest.");}
 void NFProtocolEntity::onJoinGameRequest(const JoinGameRequest &) {throw ProtocolError("Unexpected JoinGameRequest.");}
-void NFProtocolEntity::onFullSync(const GameFullSync &) {throw ProtocolError("Unexpected FullSync.");}
+void NFProtocolEntity::onLeaveGameRequest(const LeaveGameRequest &) {throw ProtocolError("Unexpected LeaveGameRequest.");}
+void NFProtocolEntity::onGameJoinError(const GameJoinError) {throw ProtocolError("Unexpected GameJoinError.");}
+void NFProtocolEntity::onFullSync(const Game &) {throw ProtocolError("Unexpected FullSync.");}
 void NFProtocolEntity::onIncrementalSync(const GameIncrementalSync &) {throw ProtocolError("Unexpected IncrementalSync.");}
 
 void NFProtocolEntity::onTimeout() {onDisconnect();}

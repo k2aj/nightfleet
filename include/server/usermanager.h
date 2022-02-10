@@ -4,6 +4,7 @@
 #include <set>
 #include <mutex>
 #include <network/message.h>
+#include <network/protocol.h>
 
 /** Responsible for handling login request & validating user credentials. 
  *  This class is thread-safe.
@@ -19,7 +20,9 @@ class UserManager {
      *  @param outUsername will contain username of the user after a succesful login attempt
      *  @returns true if login attempt succeeded, false otherwise.
      */
-    bool acceptLogin(MessageSocket &s, std::string &outUsername);
+    //bool acceptLogin(MessageSocket &s, std::string &outUsername);
+
+    LoginResponse tryLogin(const LoginRequest &request);
 
     /** Logs out the specified user. */
     void logout(const std::string &username);

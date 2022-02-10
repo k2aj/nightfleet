@@ -51,6 +51,11 @@ class Field {
         assert(inBounds(position));
         values[position.x][position.y] = std::move(value);
     }
+    void fill(const T &value) {
+        for(int x=0; x<size().x; ++x)
+            for(int y=0; y<size().y; ++y)
+                set(glm::ivec2(x,y), value);
+    }
     bool trySet(const glm::ivec2 &position, const T &value) {
         if(inBounds(position)) {
             set(position,value);

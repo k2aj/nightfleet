@@ -5,12 +5,14 @@
 
 Game::Game() {}
 
-Game::Game(GameID id, const Map &map) :
+Game::Game(GameID id, const Map &map, const std::vector<std::string> &playerUsernames) :
     terrain(map.terrain),
     units(terrain.size(), nullptr),
     playerUnitPositions(map.playerCount()),
-    _id(id)
+    _id(id),
+    playerUsernames(playerUsernames)
 {
+    assert(map.playerCount() == playerUsernames.size());
     //spawn starting units
     for(int player = 0; player < map.playerCount(); ++player)
         for(const auto &unit : map.startingUnits[player])
@@ -21,8 +23,8 @@ int Game::playerCount() const {
     return static_cast<int>(playerUnitPositions.size());
 }
 
-int Game::currentPlayer() const {
-    return _currentPlayer;
+const std::string &Game::currentPlayer() const {
+    return playerUsernames[_currentPlayer];
 }
 GameID Game::id() const {
     return _id;
@@ -44,25 +46,37 @@ void Game::spawn(std::shared_ptr<Unit> unit) {
 }
 
 void Game::endTurn() {
-    for(auto &unitPos : playerUnitPositions[currentPlayer()])
+    for(auto &unitPos : playerUnitPositions[_currentPlayer])
         unitAt(unitPos)->update(*this);
 
-   _currentPlayer = (currentPlayer() + 1) % playerCount();
+   _currentPlayer = (_currentPlayer + 1) % playerCount();
+}
+
+template<typename T>
+void readContentTypeField(RxBuffer &rx, Field<const T*> &field) {
+    auto width = rx.read<uint32_t>();
+    auto height = rx.read<uint32_t>();
+    field = Field<const T*>(glm::ivec2(width, height));
+    for(uint32_t y=0; y<height; ++y)
+        for(uint32_t x=0; x<width; ++x) {
+            field.set(glm::ivec2(x,y), readContentType<T>(rx));
+        }
 }
 
 RxBuffer &operator>>(RxBuffer &rx, Game &game) {
 
     rx >> game._id;
 
-    auto playerCount = rx.read<uint32_t>();
     rx >> game._currentPlayer;
+    rx >> game.playerUsernames;
+    auto playerCount = game.playerUsernames.size();
 
-    rx >> game.terrain;
+    readContentTypeField<TerrainType>(rx, game.terrain);
 
     auto unitCount = rx.read<uint32_t>();
     game.playerUnitPositions.resize(playerCount);
 
-    for(uint32_t i=0; i<unitCount; ++i) {
+    for(auto i=0; i<unitCount; ++i) {
         auto unit = rx.read<Unit>();
 
         if(!game.units.inBounds(unit.position))
@@ -78,8 +92,9 @@ TxBuffer &operator<<(TxBuffer &tx, const Game &game) {
 
     tx << game._id;
 
-    // # of players & current active player
-    tx << game.playerCount() << game._currentPlayer;
+    // players
+    tx << game._currentPlayer;
+    tx << game.playerUsernames;
 
     // terrain
     tx << game.terrain;

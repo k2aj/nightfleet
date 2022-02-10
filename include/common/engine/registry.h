@@ -1,5 +1,6 @@
-#pragma once
+#pragma once 
 
+#include <cstdlib>
 #include <cassert>
 #include <vector>
 #include <map>
@@ -51,6 +52,10 @@ class Registry {
     const T &getDefault() const {
         return operator[](0);
     }
+
+    size_t size() const {
+        return objects.size();
+    }
 };
 
 
@@ -66,14 +71,19 @@ class ContentType {
     static Registry<Derived> registry;
 };
 
+// apparently declaring a static class member in C++ requires deep knowledge of dark magic and high sorcery
+// yes, the `= {}` is required or the linker will throw up
+template<typename Derived>
+Registry<Derived> ContentType<Derived>::registry = {};
+
+// workaround for C++ not supporting reference to mutable pointer to const value
 template<typename T>
-RxBuffer &operator>>(RxBuffer &rx, const ContentType<T> *value) {
+auto readContentType(RxBuffer &rx) {
     auto numericID = rx.read<decltype(ContentType<T>::numericID)>();
     auto &registry = ContentType<T>::registry;
     if(!registry.contains(numericID))
         throw ProtocolError("Unknown numeric ID.");
-    value = &(registry[numericID]);
-    return rx;
+    return &(registry[numericID]);
 }
 
 template<typename T>

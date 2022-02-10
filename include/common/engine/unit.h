@@ -24,7 +24,7 @@ class UnitType : public ContentType<UnitType> {
 
 struct Unit {
 
-    UnitType *type;
+    const UnitType *type;
     int player, health, movementPoints = 0, actionPoints = 0;
     glm::ivec2 position{0};
 

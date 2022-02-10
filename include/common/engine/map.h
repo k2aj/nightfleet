@@ -6,12 +6,13 @@
 #include <engine/terrain.h>
 #include <engine/unit.h>
 
-struct Map {
+struct Map : ContentType<Map> {
 
     Field<const TerrainType *> terrain;
     std::vector<std::vector<Unit>> startingUnits;
 
     int playerCount() const;
 
-    Map(glm::ivec2 size, int playerCount);
+    Map();
+    Map(const std::string &id, glm::ivec2 size, int playerCount, const TerrainType *filler);
 };

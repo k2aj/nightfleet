@@ -4,6 +4,7 @@
 #include <mutex>
 
 #include <usermanager.h>
+#include <gamemanager.h>
 
 enum class ServerStatus {
     RUNNING,
@@ -18,6 +19,7 @@ class Server {
     public:
 
     UserManager userManager;
+    GameManager gameManager;
 
     ServerStatus status() const;
     
