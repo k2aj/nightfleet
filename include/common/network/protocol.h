@@ -33,7 +33,10 @@ enum class MessageType : uint32_t {
     LOGIN_RESPONSE = 3,
     ECHO = 4,
     ALERT = 5,
-    COUNT = 6
+    JOIN_GAME = 6,
+    GAME_FULL_SYNC = 7,
+    GAME_INCREMENTAL_SYNC = 8,
+    COUNT = 9
 };
 
 struct LoginRequest {
@@ -54,6 +57,21 @@ struct AlertRequest {
     std::string message;
 };
 
+typedef int64_t GameID;
+
+struct JoinGameRequest {
+
+    static constexpr GameID 
+        HOST_NEW = -1,
+        JOIN_ANY = 0;
+
+    GameID gameID = JOIN_ANY;
+
+};
+
+struct GameFullSync {};
+struct GameIncrementalSync {};
+
 #define DECLARE_SERDE(Type) \
     RxBuffer &operator>>(RxBuffer &rx, Type &value); \
     TxBuffer &operator<<(TxBuffer &tx, const Type &value);
@@ -63,6 +81,9 @@ DECLARE_SERDE(LoginRequest)
 DECLARE_SERDE(LoginResponse)
 DECLARE_SERDE(EchoRequest)
 DECLARE_SERDE(AlertRequest)
+DECLARE_SERDE(JoinGameRequest)
+DECLARE_SERDE(GameFullSync)
+DECLARE_SERDE(GameIncrementalSync)
 
 #undef DECLARE_ENUM_SERDE
 
@@ -81,6 +102,9 @@ class NFProtocolEntity {
     void sendLoginResponse(LoginResponse);
     void sendEchoRequest(const EchoRequest &);
     void sendAlertRequest(const AlertRequest &);
+    void sendJoinGameRequest(const JoinGameRequest &);
+    void sendFullSync(const GameFullSync &);
+    void sendIncrementalSync(const GameIncrementalSync &);
     
     virtual void onInit();
     virtual void onUpdate(const Duration &dt);
@@ -89,10 +113,13 @@ class NFProtocolEntity {
     virtual void onLoginResponse(LoginResponse);
     virtual void onEchoRequest(const EchoRequest &);
     virtual void onAlertRequest(const AlertRequest &);
+    virtual void onJoinGameRequest(const JoinGameRequest &);
+    virtual void onFullSync(const GameFullSync &);
+    virtual void onIncrementalSync(const GameIncrementalSync &);
 
-    virtual void onProtocolError(const ProtocolError &e);
+    virtual void onProtocolError(const ProtocolError &e) = 0;
     virtual void onTimeout();
-    virtual void onDisconnect();
+    virtual void onDisconnect() = 0;
 
     protected:
     std::set<MessageType> whitelist, blacklist;

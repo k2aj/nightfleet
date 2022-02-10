@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include <csignal>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -19,24 +20,24 @@
 
 class NFClientProtocolEntity : public NFProtocolEntity {
     private:
-    bool loggedIn = false;
+    enum {
+        DISCONNECTED,
+        LOGIN_SCREEN,
+        GAME_LOBBY,
+        INGAME
+    } guiFsm = DISCONNECTED;
+
+    char username[32] = {'\0'}, password[32] = {'\0'};
+    bool waitingForLoginResponse = false;
+    std::string loginRejectionReason;
 
     public:
 
     NFClientProtocolEntity(int sockfd) : NFProtocolEntity(sockfd) {}
 
     void onInit() override {
-        blacklist = {MessageType::LOGIN_REQUEST, MessageType::ECHO};
         whitelist = {MessageType::VERSION};
         sendVersionHandshake(applicationVersion);
-        setTimeout(5s);
-    }
-
-    void attemptLogin() {
-        std::cout << "Enter username: ";
-        LoginRequest credentials;
-        std::getline(std::cin, credentials.username);
-        sendLoginRequest(credentials);
         setTimeout(5s);
     }
 
@@ -47,7 +48,7 @@ class NFClientProtocolEntity : public NFProtocolEntity {
 
         if(applicationVersion.isCompatibleWith(version)) {
             std::cerr << "Succesfully connected to server." << std::endl;
-            attemptLogin();
+            guiFsm = LOGIN_SCREEN;
         } else {
             std::cerr << "Error: mismatched client/server version." << std::endl;
             halt();
@@ -55,18 +56,19 @@ class NFClientProtocolEntity : public NFProtocolEntity {
     }
 
     void onLoginResponse(LoginResponse r) override {
+
         switch(r) {
 
             case LoginResponse::OK: 
                 std::cerr << "Login succesful!" << std::endl;
                 whitelist.clear();
                 blacklist.insert(MessageType::LOGIN_RESPONSE);
-                loggedIn = true;
+                guiFsm = GAME_LOBBY;
                 break;
 
             case LoginResponse::E_ALREADY_LOGGED_IN:
                 std::cerr << "Error: user is already logged in." << std::endl;
-                attemptLogin();
+                loginRejectionReason = "This user is already logged in.";
                 break;
 
             default:
@@ -74,6 +76,8 @@ class NFClientProtocolEntity : public NFProtocolEntity {
                 halt();
                 break;
         }
+
+        waitingForLoginResponse = false;
     }
 
     void onAlertRequest(const AlertRequest &r) override {
@@ -81,7 +85,7 @@ class NFClientProtocolEntity : public NFProtocolEntity {
     }
 
     void onUpdate(const Duration &dt) override {
-        if(loggedIn) {
+        /*if(guiFsm == GAME_LOBBY) {
             std::string line;
             std::getline(std::cin, line);
             if(line == "exit")
@@ -92,6 +96,49 @@ class NFClientProtocolEntity : public NFProtocolEntity {
                 sendEchoRequest(request);
                 setTimeout(5s);
             }
+        }*/
+
+        switch(guiFsm) {
+
+            case DISCONNECTED: {
+                ImGui::Begin("Info");
+                ImGui::Text("Connecting to server...");
+                ImGui::End();
+            }
+            break;
+
+            case LOGIN_SCREEN: {
+                ImGui::Begin("Login");
+                ImGui::InputText("Username", username, sizeof username);
+                ImGui::InputText("Password", password, sizeof password);
+
+                if(ImGui::Button("Login") && !waitingForLoginResponse) {
+                    LoginRequest credentials;
+                    credentials.username = username;
+                    sendLoginRequest(credentials);
+                    setTimeout(5s);
+                    waitingForLoginResponse = true;
+                    loginRejectionReason = "";
+                }
+                if(!loginRejectionReason.empty())
+                    ImGui::TextColored(ImVec4(1,0,0,1), loginRejectionReason.c_str());
+
+                ImGui::End();
+            }
+            break;
+
+            case GAME_LOBBY:{
+                ImGui::Begin("Lobby");
+                ImGui::Button("Join radnom game");
+                ImGui::Button("Host a new game");
+                ImGui::End();
+            }
+            break;
+
+            case INGAME: {
+
+            }
+            break;
         }
     }
 
@@ -114,30 +161,18 @@ class NFClientProtocolEntity : public NFProtocolEntity {
 void printGlfwError(const std::string &message, std::ostream &out = std::cerr);
 int createClientSocket(const std::string &serverAddress, uint16_t serverPort);
 
+volatile sig_atomic_t interrupted = 0;
+void signalHandler(int signum) {
+    interrupted = 1;
+}
+
 int main(int argc, char **argv) {
 
     TimePoint t0 = Clock::now();
 
-    int sockfd = createClientSocket("127.0.0.1", defaultServerPort);
-    if(sockfd == -1) {
-        perror("Failed to connect to server"); 
-        return EXIT_FAILURE;
-    }
+    signal(SIGINT, signalHandler);
 
-    NFClientProtocolEntity entity(sockfd);
-    entity.onInit();
-
-    while(entity.isRunning()) {
-
-        TimePoint t1 = Clock::now();
-        Duration dt = t1 - t0;
-        t0 = t1;
-
-        entity.runNetworkEvents();
-        entity.onUpdate(dt);
-    }
-    
-    /*// Initialize GLFW
+    //Initialize GLFW
     if(!glfwInit()) {
         printGlfwError("Failed to initialize GLFW");
         return EXIT_FAILURE;
@@ -160,7 +195,7 @@ int main(int argc, char **argv) {
         std::cerr << "Failed to load OpenGL." << std::endl;
         return EXIT_FAILURE;
     }
-    
+
     // Initialize ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -172,14 +207,29 @@ int main(int argc, char **argv) {
     ImGui_ImplOpenGL3_Init("#version 330");
     scope_exit(ImGui_ImplOpenGL3_Shutdown());
 
-    // Main loop
-    while(!glfwWindowShouldClose(window)) {
+    // Connect to server
+    // TODO this should be moved somewhere else
+    int sockfd = createClientSocket("127.0.0.1", defaultServerPort);
+    if(sockfd == -1) {
+        perror("Failed to connect to server"); 
+        return EXIT_FAILURE;
+    }
 
-        glfwPollEvents();
+    NFClientProtocolEntity entity(sockfd);
+    entity.onInit();
+
+    while(entity.isRunning() && !glfwWindowShouldClose(window) && !interrupted) {
+
+        TimePoint t1 = Clock::now();
+        Duration dt = t1 - t0;
+        t0 = t1;
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+
+        entity.runNetworkEvents();
+        entity.onUpdate(dt);
 
         ImGui::ShowDemoWindow(nullptr);
 
@@ -195,7 +245,8 @@ int main(int argc, char **argv) {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
-    }*/
+        glfwPollEvents();
+    }
 
     return EXIT_SUCCESS;
 }

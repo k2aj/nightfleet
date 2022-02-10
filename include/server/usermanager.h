@@ -21,6 +21,9 @@ class UserManager {
      */
     bool acceptLogin(MessageSocket &s, std::string &outUsername);
 
+    /** Logs out the specified user. */
+    void logout(const std::string &username);
+
     private:
 
     std::mutex mutex;

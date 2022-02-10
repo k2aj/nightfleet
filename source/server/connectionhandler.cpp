@@ -27,7 +27,10 @@ void handleConnection(int sockfd, Server *server) {
     } while(!server->userManager.acceptLogin(client, username));
 
     std::cerr << "Login: " << username << std::endl;
-    scope_exit(std::cerr << "Logout: " << username << std::endl);
+    scope_exit(
+        std::cerr << "Logout: " << username << std::endl; 
+        server->userManager.logout(username)
+    );
 
     while(client.isConnected()) {
 

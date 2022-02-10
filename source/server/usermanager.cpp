@@ -1,5 +1,6 @@
 #include <usermanager.h>
 
+#include <cassert>
 #include <network/protocol.h>
 
 bool UserManager::acceptLogin(MessageSocket &s, std::string &outUsername) {
@@ -47,4 +48,10 @@ bool UserManager::acceptLogin(MessageSocket &s, std::string &outUsername) {
     }
     s.sendMessage(response);
     return result;
+}
+
+void UserManager::logout(const std::string &username) {
+    std::scoped_lock lk(mutex);
+    assert(activeUsers.find(username) != activeUsers.end());
+    activeUsers.erase(username);
 }
