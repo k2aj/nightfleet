@@ -29,7 +29,7 @@ target_link_libraries(nfcommon Threads::Threads)
 
 add_executable(nfclient "")
 target_include_directories(nfclient PRIVATE include/client)
-target_link_libraries(nfclient nfcommon glad glfw imgui)
+target_link_libraries(nfclient nfcommon glad glfw imgui stb)
 
 add_executable(nfserver "")
 target_include_directories(nfserver PRIVATE include/server)
