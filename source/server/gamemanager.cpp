@@ -69,6 +69,8 @@ void GameManager::leaveGame(const std::string &username) {
         games.erase(id);
         if(joinableGames.find(id) != joinableGames.end())
             joinableGames.erase(id);
+    } else {
+        entry.moveList.push_back(Move::forceSurrender(entry.game->getPlayerIndex(username)));
     }
 
     playerGames.erase(username);

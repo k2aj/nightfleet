@@ -56,12 +56,19 @@ TxBuffer &operator<<(TxBuffer &tx, const EchoRequest &request) {
     return (tx << request.message);
 }
 
-RxBuffer &operator>>(RxBuffer &rx, HostGameRequest &request) {\
+RxBuffer &operator>>(RxBuffer &rx, HostGameRequest &request) {
     request.map = readContentType<Map>(rx);
     return rx;
 }
 TxBuffer &operator<<(TxBuffer &tx, const HostGameRequest &request) {
     return (tx << request.map);
+}
+
+RxBuffer &operator>>(RxBuffer &rx, HostGameAck &ack) {
+    return (rx >> ack.gameID);
+}
+TxBuffer &operator<<(TxBuffer &tx, const HostGameAck &ack) {
+    return (tx << ack.gameID);
 }
 
 RxBuffer &operator>>(RxBuffer &rx, JoinGameRequest &request) {
@@ -130,6 +137,7 @@ void NFProtocolEntity::runNetworkEvents() {
                 DISPATCH(ECHO,                  EchoRequest,            onEchoRequest)
                 DISPATCH(ALERT,                 AlertRequest,           onAlertRequest)
                 DISPATCH(HOST_GAME,             HostGameRequest,        onHostGameRequest)
+                DISPATCH(HOST_GAME_ACK,         HostGameAck,            onHostGameAck)
                 DISPATCH(JOIN_GAME,             JoinGameRequest,        onJoinGameRequest)
                 DISPATCH(LEAVE_GAME,            LeaveGameRequest,       onLeaveGameRequest)
                 DISPATCH(GAME_JOIN_ERROR,       GameJoinError,          onGameJoinError)
@@ -195,6 +203,11 @@ void NFProtocolEntity::sendHostGameRequest(const HostGameRequest &r) {
     message << MessageType::HOST_GAME << r;
     msock.sendMessage(message);
 }
+void NFProtocolEntity::sendHostGameAck(const HostGameAck &r) {
+    TxBuffer message;
+    message << MessageType::HOST_GAME_ACK << r;
+    msock.sendMessage(message);
+}
 void NFProtocolEntity::sendJoinGameRequest(const JoinGameRequest &r) {
     TxBuffer message;
     message << MessageType::JOIN_GAME << r;
@@ -232,6 +245,7 @@ void NFProtocolEntity::onLoginResponse(LoginResponse) {throw ProtocolError("Unex
 void NFProtocolEntity::onEchoRequest(const EchoRequest &) {throw ProtocolError("Unexpected EchoRequest.");}
 void NFProtocolEntity::onAlertRequest(const AlertRequest &) {throw ProtocolError("Unexpected EchoResponse.");}
 void NFProtocolEntity::onHostGameRequest(const HostGameRequest &) {throw ProtocolError("Unexpected HostGameRequest.");}
+void NFProtocolEntity::onHostGameAck(const HostGameAck &) {throw ProtocolError("Unexpected HostGameAck.");}
 void NFProtocolEntity::onJoinGameRequest(const JoinGameRequest &) {throw ProtocolError("Unexpected JoinGameRequest.");}
 void NFProtocolEntity::onLeaveGameRequest(const LeaveGameRequest &) {throw ProtocolError("Unexpected LeaveGameRequest.");}
 void NFProtocolEntity::onGameJoinError(const GameJoinError) {throw ProtocolError("Unexpected GameJoinError.");}

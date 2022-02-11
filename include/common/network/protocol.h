@@ -30,12 +30,13 @@ enum class MessageType : uint32_t {
     ECHO = 4,
     ALERT = 5,
     HOST_GAME = 6,
-    JOIN_GAME = 7,
-    LEAVE_GAME = 8,
-    GAME_JOIN_ERROR = 9,
-    GAME_FULL_SYNC = 10,
-    GAME_INCREMENTAL_SYNC = 11,
-    COUNT = 12
+    HOST_GAME_ACK = 7,
+    JOIN_GAME = 8,
+    LEAVE_GAME = 9,
+    GAME_JOIN_ERROR = 10,
+    GAME_FULL_SYNC = 11,
+    GAME_INCREMENTAL_SYNC = 12,
+    COUNT = 13
 };
 
 struct LoginRequest {
@@ -60,6 +61,10 @@ struct AlertRequest {
 
 struct HostGameRequest {
     const Map *map;
+};
+
+struct HostGameAck {
+    GameID gameID;
 };
 
 struct JoinGameRequest {
@@ -92,6 +97,7 @@ DECLARE_SERDE(LoginResponse)
 DECLARE_SERDE(EchoRequest)
 DECLARE_SERDE(AlertRequest)
 DECLARE_SERDE(HostGameRequest)
+DECLARE_SERDE(HostGameAck)
 DECLARE_SERDE(JoinGameRequest)
 DECLARE_SERDE(LeaveGameRequest)
 DECLARE_SERDE(GameJoinError)
@@ -114,6 +120,7 @@ class NFProtocolEntity {
     void sendAlertRequest(const AlertRequest &);
     void sendJoinGameRequest(const JoinGameRequest &);
     void sendHostGameRequest(const HostGameRequest &);
+    void sendHostGameAck(const HostGameAck &);
     void sendLeaveGameRequest(const LeaveGameRequest &);
     void sendGameJoinError(GameJoinError);
     void sendFullSync(const Game &);
@@ -127,6 +134,7 @@ class NFProtocolEntity {
     virtual void onEchoRequest(const EchoRequest &);
     virtual void onAlertRequest(const AlertRequest &);
     virtual void onHostGameRequest(const HostGameRequest &);
+    virtual void onHostGameAck(const HostGameAck &);
     virtual void onJoinGameRequest(const JoinGameRequest &);
     virtual void onLeaveGameRequest(const LeaveGameRequest &);
     virtual void onGameJoinError(GameJoinError);

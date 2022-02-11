@@ -23,6 +23,9 @@ Move Move::endTurn() {
 Move Move::surrender() {
     return {MoveType::SURRENDER};
 }
+Move Move::forceSurrender(int playerIndex) {
+    return {MoveType::FORCED_SURRENDER, {playerIndex}};
+}
 
 DEFINE_ENUM_SERDE(MoveType)
 

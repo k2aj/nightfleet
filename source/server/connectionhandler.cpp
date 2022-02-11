@@ -83,6 +83,13 @@ class NFServerProtocolEntity : public NFProtocolEntity {
 
             default: break;
         }
+        if(
+            server.status() == ServerStatus::FAST_SHUTDOWN ||
+            (server.status() == ServerStatus::SLOW_SHUTDOWN && fsm == IDLE)    
+        ) {
+            haltReason = "Server shutting down.";
+            cleanupAndHalt();
+        }
     }
 
     void onHostGameRequest(const HostGameRequest &request) override {
@@ -98,9 +105,10 @@ class NFServerProtocolEntity : public NFProtocolEntity {
             throw ProtocolError("User is already in game.");
 
         auto error = server.gameManager.hostNewGame(username, *request.map, gameID);
-        if(error == GameJoinError::NO_ERROR)
+        if(error == GameJoinError::NO_ERROR) {
             fsm = AWAITING_GAME;
-        else
+            sendHostGameAck({gameID});
+        } else
             sendGameJoinError(error);
     }
 
@@ -134,9 +142,9 @@ class NFServerProtocolEntity : public NFProtocolEntity {
 
     void onLeaveGameRequest(const LeaveGameRequest &request) override {
         if(fsm == AWAITING_GAME || fsm == INGAME) {
-            server.gameManager.leaveGame(username);
             if(fsm == INGAME)
                 sendLeaveGameRequest({});
+            server.gameManager.leaveGame(username);
             fsm = IDLE;
         } else
             throw ProtocolError("Unexpected LeaveGameRequest");
@@ -154,6 +162,8 @@ class NFServerProtocolEntity : public NFProtocolEntity {
             try {
                 if(game.currentPlayer() != username)
                     throw InvalidMoveError("Player attempted to move when it was not their turn.");
+                if(move.type == MoveType::FORCED_SURRENDER)
+                    throw InvalidMoveError("Client is not allowed to send force surrender.");
                 game.makeMove(move);
                 globalMoves.push_back(move);
                 ++knownMoveCount;

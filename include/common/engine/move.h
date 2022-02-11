@@ -14,7 +14,8 @@ enum class MoveType : uint32_t {
     ATTACK_UNIT = 1,
     END_TURN = 2,
     SURRENDER = 3,
-    COUNT = 4
+    FORCED_SURRENDER = 4,
+    COUNT = 5
 };
 
 struct Move {
@@ -25,6 +26,7 @@ struct Move {
     static Move attackUnit(const Unit &attacker, const Unit &target);
     static Move endTurn();
     static Move surrender();
+    static Move forceSurrender(int playerIndex);
 };
 
 DECLARE_SERDE(Move)

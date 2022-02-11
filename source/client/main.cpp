@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <inttypes.h>
 
 #include <glm/glm.hpp>
 #include <glad/glad.h>
@@ -39,11 +40,12 @@ class NFClientProtocolEntity : public NFProtocolEntity {
     const Map *selectedMap = nullptr;
     char enteredGameID[32] = {'\0'};
     std::unique_ptr<Game> game;
+    GameID gameID = 0;
 
     glm::mat4 projMatrix{1};
     SpriteRenderer renderer;
     std::vector<AtlasArea> unitSprites, terrainSprites;
-    AtlasArea blankImg;
+    AtlasArea victoryMsg, defeatMsg;
     
     std::map<glm::ivec2, glm::ivec2, IVec2Comparator> selectedUnitMovementRange;
     int playerIndex;
@@ -56,7 +58,8 @@ class NFClientProtocolEntity : public NFProtocolEntity {
 
     NFClientProtocolEntity(int sockfd) : NFProtocolEntity(sockfd) {
 
-        blankImg = renderer.loadImage("../textures/white.png");
+        victoryMsg = renderer.loadImage("../textures/victory.png");
+        defeatMsg = renderer.loadImage("../textures/defeat.png");
 
         for(int id = 0; id < UnitType::registry.size(); ++id)
             unitSprites.push_back(renderer.loadImage(std::string("../textures/units/") + UnitType::registry[id].id + std::string(".png")));
@@ -97,6 +100,7 @@ class NFClientProtocolEntity : public NFProtocolEntity {
 
             default:
                 std::cerr << "Unknown login error." << std::endl;
+                loginRejectionReason = "Unknown error.";
                 halt();
                 break;
         }
@@ -190,6 +194,7 @@ class NFClientProtocolEntity : public NFProtocolEntity {
                 }
                 if(ImGui::Button("Host a new game") && selectedMap != nullptr) {
                     sendHostGameRequest({selectedMap});
+                    gameID = 0;
                     guiFsm = WAITING_ROOM;
                 }
 
@@ -200,6 +205,8 @@ class NFClientProtocolEntity : public NFProtocolEntity {
             case WAITING_ROOM: {
                 ImGui::Begin("Info");
                 ImGui::Text("Waiting for other players to join.");
+                if(gameID)
+                    ImGui::Text("Game ID = %d", (int)gameID);
                 if(ImGui::Button("Leave game")) {
                     sendLeaveGameRequest({});
                     guiFsm = GAME_LOBBY;
@@ -236,7 +243,7 @@ class NFClientProtocolEntity : public NFProtocolEntity {
                                 std::reverse(path.begin(), path.end());
                                 makeMove(Move::moveUnit(path));
 
-                            } else if (selectedUnit->actionPoints > 0 && hoveredUnit != nullptr & hoveredUnit->player != playerIndex && areTilesAdjacent(selectedTile, gridMousePos)) {
+                            } else if (selectedUnit->actionPoints > 0 && hoveredUnit != nullptr && hoveredUnit->player != playerIndex && areTilesAdjacent(selectedTile, gridMousePos)) {
                                 //we clicked on an enemy unit in attack range
                                 makeMove(Move::attackUnit(*selectedUnit, *hoveredUnit));
                                 if(selectedUnit->actionPoints <= 0)
@@ -252,8 +259,12 @@ class NFClientProtocolEntity : public NFProtocolEntity {
                     ImGui::TextColored(myTurn ? Colors::green : Colors::red, "Current player: %s", game->currentPlayer().c_str());
                     if(ImGui::Button("End turn") && myTurn) 
                         makeMove(Move::endTurn());
-                    if(ImGui::Button("Surrender") && myTurn) 
+                    if(ImGui::Button("Surrender") && myTurn)
                         makeMove(Move::surrender());
+                    if(ImGui::Button("Quit")) {
+                        sendLeaveGameRequest({});
+                        guiFsm = GAME_LOBBY;
+                    }
                 ImGui::End();
 
                 if(selectedUnit != nullptr)
@@ -313,12 +324,12 @@ class NFClientProtocolEntity : public NFProtocolEntity {
 
         renderer.mulColor(glm::vec4(1,1,0,1) * glm::vec4(sin(glfwGetTime()*8)*0.3300 + 0.3301));
         for(auto [succ,pred] : selectedUnitMovementRange)
-            renderer.drawImage(blankImg, succ, glm::vec2(0.5f));
+            renderer.drawRectangle(succ, glm::vec2(0.5f));
         renderer.mulColor();
 
         if(game->terrain.inBounds(gridMousePos)) {
             renderer.mulColor({1,1,1,0.33f});
-            renderer.drawImage(blankImg, gridMousePos, glm::vec2(0.5f));
+            renderer.drawRectangle(gridMousePos, glm::vec2(0.5f));
             renderer.mulColor();
         }
 
@@ -326,6 +337,15 @@ class NFClientProtocolEntity : public NFProtocolEntity {
             auto p1 = gridMousePos;
             for(auto p2 = selectedUnitMovementRange[p1]; p1 != p2; p1 = p2, p2 = selectedUnitMovementRange[p2])
                 renderer.drawLine(p1, p2, 0.1);
+        }
+
+        glm::vec2 msgCenter = glm::vec2(game->terrain.size())/glm::vec2(2);
+        glm::vec2 msgRadii = {msgCenter.x, msgCenter.x*9/16};
+
+        if(game->didPlayerLoose(usernameStr)) {
+            renderer.drawImage(defeatMsg, msgCenter, msgRadii);             
+        } else if(game->didPlayerWin(usernameStr)) {
+            renderer.drawImage(victoryMsg, msgCenter, msgRadii); 
         }
 
         renderer.render(projMatrix);
@@ -352,6 +372,10 @@ class NFClientProtocolEntity : public NFProtocolEntity {
             } catch (InvalidMoveError e) {
                 throw ProtocolError(std::string("Invalid move in received IncrementalSync: ") + std::string(e.what()));
             }
+    }
+
+    void onHostGameAck(const HostGameAck &ack) {
+        gameID = ack.gameID;
     }
 
     void onLeaveGameRequest(const LeaveGameRequest &) override {
