@@ -382,6 +382,10 @@ class NFClientProtocolEntity : public NFProtocolEntity {
         guiFsm = GAME_LOBBY;
     }
 
+    void onGameJoinError(GameJoinError) override {
+        guiFsm = GAME_LOBBY;
+    }
+
     void onProtocolError(const ProtocolError &e) override {
         std::cerr << "Protocol error: " << e.what() << std::endl;
         halt();
