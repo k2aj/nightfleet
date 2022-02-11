@@ -42,8 +42,6 @@ AtlasArea Atlas::allocate(const glm::ivec2 &minSize) {
         createFreeBlocks(log2NeededSize);
 
     auto result = freeBlocks[log2NeededSize].back();
-    std::cerr << "Min size: " << minSize.x << ' ' << minSize.y << std::endl;
-    std::cerr << "Block: " << result.offset.x << ' ' << result.offset.y << ' ' << result.size.x << ' ' << result.size.y << std::endl;
     freeBlocks[log2NeededSize].pop_back();
     return result;
 }
@@ -60,7 +58,6 @@ AtlasArea Atlas::load(const std::string &path) {
     block.size = {width, height};
 
     attach();
-    std::cerr << "glTexSubImage2D params: " << block.offset.x << ' ' << block.offset.y <<' ' << width << ' ' << height << std::endl; 
     glTexSubImage2D(GL_TEXTURE_2D, 0, block.offset.x, block.offset.y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, image);
 
     stbi_image_free(image);
@@ -114,7 +111,6 @@ void Atlas::expand() {
     freeBlocks.back().push_back({size(),size()});
     freeBlocks.push_back({});
     ++log2Size;
-    std::cerr << "Size after expand = " << size().x << ' ' << size().y << std::endl;
 }
 
 glm::ivec2 Atlas::size() const {

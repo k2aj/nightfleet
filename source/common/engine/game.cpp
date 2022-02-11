@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <numeric>
+#include <queue>
 
 Game::Game() {}
 
@@ -38,6 +39,17 @@ std::shared_ptr<Unit> Game::unitAt(const glm::ivec2 &position) {
     return units.getOr(position, {});
 }
 
+bool Game::isTileOccupied(const glm::ivec2 &position) {
+    return unitAt(position) != nullptr;
+}
+
+int Game::getPlayerIndex(const std::string &username) {
+    for(int i=0; i<playerUsernames.size(); ++i)
+        if(username == playerUsernames[i])
+            return i;
+    return -1;
+}
+
 void Game::spawn(std::shared_ptr<Unit> unit) {
     assert(!unitAt(unit->position));
     assert(unit->player >= 0 && unit->player < playerCount());
@@ -49,7 +61,35 @@ void Game::endTurn() {
     for(auto &unitPos : playerUnitPositions[_currentPlayer])
         unitAt(unitPos)->update(*this);
 
-   _currentPlayer = (_currentPlayer + 1) % playerCount();
+    int maxRetries = playerCount();
+    do _currentPlayer = (_currentPlayer + 1) % playerCount();
+    while(playerUnitPositions[_currentPlayer].empty() && maxRetries--);
+}
+
+void Game::forceSurrender(const std::string &username) {
+    int idx = getPlayerIndex(username);
+    assert(idx != -1);
+
+    for(auto unitPos : playerUnitPositions[idx])
+        units.set(unitPos, {});
+    playerUnitPositions.clear();
+}
+
+// player wins if they still have units remaining and all other players have lost
+bool Game::didPlayerWin(const std::string &username) {
+    int idx = getPlayerIndex(username);
+    assert(idx != -1);
+    if(playerUnitPositions[idx].empty())
+        return false;
+    for(int j=0; j<playerCount(); ++j)
+        if(j != idx && !playerUnitPositions[j].empty())
+            return false;
+    return true;
+}
+bool Game::didPlayerLoose(const std::string &username) {
+    int idx = getPlayerIndex(username);
+    assert(idx != -1);
+    return playerUnitPositions[idx].empty(); //player looses when they have no units left
 }
 
 void Game::makeMove(const Move &m) {
@@ -91,6 +131,10 @@ void Game::makeMove(const Move &m) {
             endTurn();
         break;
 
+        case MoveType::SURRENDER:
+            forceSurrender(currentPlayer());
+        break;
+
         default:
             throw InvalidMoveError("Not implemented.");
     }
@@ -111,7 +155,7 @@ void Game::moveUnitOneTile(const glm::ivec2 &from, const glm::ivec2 &to) {
     if(unit->movementPoints <= 0)
         throw InvalidMoveError("Movement points depleted.");
 
-    if(unitAt(to))
+    if(isTileOccupied(to))
         throw InvalidMoveError("Destination tile is occupied.");
 
     if(!terrain.inBounds(to))
@@ -124,6 +168,55 @@ void Game::moveUnitOneTile(const glm::ivec2 &from, const glm::ivec2 &to) {
     units.set(from, {});
     playerUnitPositions[_currentPlayer].erase(from);
     playerUnitPositions[_currentPlayer].insert(to);
+}
+
+int Game::adjacentTileMovementCost(const glm::ivec2 &srcTile, const glm::ivec2 &dstTile) {
+    assert(areTilesAdjacent(srcTile, dstTile));
+    return terrain.get(srcTile)->movementCost + terrain.get(dstTile)->movementCost;
+}
+
+struct PathElement {
+    glm::ivec2 position;
+    int movementPointsLeft;
+};
+
+bool operator<(const PathElement &a, const PathElement &b) {
+    if(a.movementPointsLeft < b.movementPointsLeft) return true;
+    if(a.movementPointsLeft > b.movementPointsLeft) return false;
+    return IVec2Comparator()(a.position, b.position);
+}
+
+std::map<glm::ivec2, glm::ivec2, IVec2Comparator> Game::findReachableTiles(const Unit &u) {
+
+    // Standard Djikstra algorithm, nothing fancy here.
+
+    std::map<glm::ivec2, glm::ivec2, IVec2Comparator> predecessor;
+    predecessor[u.position] = u.position;
+
+    std::priority_queue<PathElement, std::vector<PathElement>> queue;
+    queue.push({u.position, u.movementPoints});
+
+    while(!queue.empty()) {
+
+        auto current = queue.top();
+        queue.pop();
+
+        glm::ivec2 neighbourOffsets[4] = {glm::ivec2(-1,0), glm::ivec2(1,0), glm::ivec2(0,-1), glm::ivec2(0,1)};
+
+        if(current.movementPointsLeft > 0)
+            for(int i=0; i<4; ++i) {
+                glm::ivec2 next = current.position + neighbourOffsets[i];
+                if(
+                    terrain.inBounds(next) &&
+                    !isTileOccupied(next) &&
+                    predecessor.find(next) == predecessor.end()
+                ) {
+                    predecessor[next] = current.position;
+                    queue.push({next, current.movementPointsLeft - adjacentTileMovementCost(current.position, next)});
+                }
+            }
+    }
+    return predecessor;
 }
 
 template<typename T>
@@ -149,6 +242,7 @@ RxBuffer &operator>>(RxBuffer &rx, Game &game) {
 
     auto unitCount = rx.read<uint32_t>();
     game.playerUnitPositions.resize(playerCount);
+    game.units = Field<std::shared_ptr<Unit>>(game.terrain.size());
 
     for(auto i=0; i<unitCount; ++i) {
         auto unit = rx.read<Unit>();
@@ -188,4 +282,12 @@ TxBuffer &operator<<(TxBuffer &tx, const Game &game) {
             tx << *game.unitAt(position);
 
     return tx;
+}
+
+int taxicabDistance(const glm::ivec2 &srcTile, const glm::ivec2 &dstTile) {
+    return abs(srcTile.x-dstTile.x) + abs(srcTile.y-dstTile.y);
+}
+
+bool areTilesAdjacent(const glm::ivec2 &srcTile, const glm::ivec2 &dstTile) {
+    return taxicabDistance(srcTile, dstTile) == 1;
 }

@@ -20,6 +20,7 @@ class GameManager {
     GameID findGameByPlayer(const std::string &username);
     bool isGameReady(GameID id);
     std::mutex &getGameMutex(GameID id);
+    std::vector<Move> &getMoveList(GameID id);
 
     /** Note: the returned game object is NOT thread safe
      *  To ensure thread safety you need to lock the mutex obtained 
@@ -41,10 +42,8 @@ class GameManager {
         std::unique_ptr<Game> game;
         std::mutex gameMutex;
         std::vector<std::string> players;
-
-        bool ready() const {
-            return players.size() == map->playerCount();
-        }
+        std::vector<Move> moveList;
+        bool ready = false;
     };
     std::map<GameID, Entry> games;
     std::set<GameID> joinableGames;

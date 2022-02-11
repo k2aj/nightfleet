@@ -1,11 +1,11 @@
 #include <iostream>
-
+#include <algorithm>
 #include <csignal>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#include <glm/vec2.hpp>
+#include <glm/glm.hpp>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -35,19 +35,28 @@ class NFClientProtocolEntity : public NFProtocolEntity {
 
     char username[32] = {'\0'}, password[32] = {'\0'};
     bool waitingForLoginResponse = false;
-    std::string loginRejectionReason;
+    std::string loginRejectionReason, usernameStr;
     const Map *selectedMap = nullptr;
     char enteredGameID[32] = {'\0'};
     std::unique_ptr<Game> game;
 
+    glm::mat4 projMatrix{1};
     SpriteRenderer renderer;
     std::vector<AtlasArea> unitSprites, terrainSprites;
-
-    AtlasArea imgFighter;
+    AtlasArea blankImg;
+    
+    std::map<glm::ivec2, glm::ivec2, IVec2Comparator> selectedUnitMovementRange;
+    int playerIndex;
+    std::vector<Move> savedMoves;
 
     public:
 
+    static constexpr glm::ivec2 NO_TILE_SELECTED = glm::ivec2{-1};
+    glm::ivec2 windowSize, gridMousePos, selectedTile = NO_TILE_SELECTED;
+
     NFClientProtocolEntity(int sockfd) : NFProtocolEntity(sockfd) {
+
+        blankImg = renderer.loadImage("../textures/white.png");
 
         for(int id = 0; id < UnitType::registry.size(); ++id)
             unitSprites.push_back(renderer.loadImage(std::string("../textures/units/") + UnitType::registry[id].id + std::string(".png")));
@@ -99,7 +108,28 @@ class NFClientProtocolEntity : public NFProtocolEntity {
         std::cerr << "ALERT: " << r.message << std::endl;
     }
 
-    void onUpdate(const Duration &dt) override {
+    void makeMove(const Move &m) {
+        assert(game->currentPlayer() == usernameStr);
+        game->makeMove(m);
+        savedMoves.push_back(m);
+    }
+
+    void showUnitInfo(const std::string &windowName, const Unit &unit) {
+        ImGui::Begin(windowName.c_str());
+            ImGui::TextColored(unit.player == playerIndex ? ImVec4(0,1,0,1) : ImVec4(1,0,0,1), "%s", unit.type->id.c_str());
+            ImGui::Text("HP: %d/%d", unit.health, unit.type->maxHealth);
+            ImGui::Text("MP: %d/%d", unit.movementPoints, unit.type->movementPointsPerTurn);
+            ImGui::Text("AP: %d/%d", unit.actionPoints, unit.type->actionPointsPerTurn);
+        ImGui::End();
+    }
+
+    void onUpdate(const Duration &dt) override {\
+
+        ImGuiIO &io = ImGui::GetIO();
+
+        glm::vec2 relativeMousePos = (glm::vec2(ImGui::GetMousePos()) / glm::vec2(windowSize) * glm::vec2(2) - glm::vec2(1)) * glm::vec2(1,-1);
+        glm::vec4 gp = (glm::inverse(projMatrix) * glm::vec4(relativeMousePos, 0.0, 1.0f));
+        gridMousePos = glm::ivec2(std::round(gp.x), std::round(gp.y));
 
         switch(guiFsm) {
 
@@ -117,7 +147,7 @@ class NFClientProtocolEntity : public NFProtocolEntity {
 
                 if(ImGui::Button("Login") && !waitingForLoginResponse) {
                     LoginRequest credentials;
-                    credentials.username = username;
+                    credentials.username = usernameStr = username;
                     sendLoginRequest(credentials);
                     setTimeout(5s);
                     waitingForLoginResponse = true;
@@ -180,6 +210,61 @@ class NFClientProtocolEntity : public NFProtocolEntity {
 
             case INGAME: {
 
+                bool myTurn = game->currentPlayer() == usernameStr;
+
+                auto selectedUnit = game->unitAt(selectedTile);
+                auto hoveredUnit = game->unitAt(gridMousePos);
+
+                if(selectedUnit != nullptr) {
+                    selectedUnitMovementRange = game->findReachableTiles(*selectedUnit);
+                } else
+                    selectedUnitMovementRange.clear();
+
+                if(!io.WantCaptureMouse) {
+                    if(io.MouseClicked[0]) {
+
+                        if(selectedTile == gridMousePos) //selecting same thing twice = deselection
+                            selectedTile = NO_TILE_SELECTED;
+                        else if(selectedUnit == nullptr || selectedUnit->player != playerIndex || !myTurn) { 
+                            selectedTile = gridMousePos;
+                        } else { //friendly unit is selected and we can make a move
+                            if(selectedUnitMovementRange.find(gridMousePos) != selectedUnitMovementRange.end()) {
+                                //we clicked a location, which can be moved to!
+                                std::vector<glm::ivec2> path = {gridMousePos};
+                                while(path.back() != selectedUnit->position)
+                                    path.push_back(selectedUnitMovementRange[path.back()]);
+                                std::reverse(path.begin(), path.end());
+                                makeMove(Move::moveUnit(path));
+
+                            } else if (selectedUnit->actionPoints > 0 && hoveredUnit != nullptr & hoveredUnit->player != playerIndex && areTilesAdjacent(selectedTile, gridMousePos)) {
+                                //we clicked on an enemy unit in attack range
+                                makeMove(Move::attackUnit(*selectedUnit, *hoveredUnit));
+                                if(selectedUnit->actionPoints <= 0)
+                                    selectedTile = NO_TILE_SELECTED;
+                            } else {
+                                selectedTile = gridMousePos;
+                            }
+                        }
+                    }
+                }
+
+                ImGui::Begin("Game");
+                    ImGui::TextColored(myTurn ? Colors::green : Colors::red, "Current player: %s", game->currentPlayer().c_str());
+                    if(ImGui::Button("End turn") && myTurn) 
+                        makeMove(Move::endTurn());
+                    if(ImGui::Button("Surrender") && myTurn) 
+                        makeMove(Move::surrender());
+                ImGui::End();
+
+                if(selectedUnit != nullptr)
+                    showUnitInfo("Selected unit", *selectedUnit);
+                if(hoveredUnit != nullptr && hoveredUnit != selectedUnit)
+                    showUnitInfo("Hovered unit", *hoveredUnit);
+
+                if(!savedMoves.empty()) {
+                    sendIncrementalSync({savedMoves});
+                    savedMoves.clear();
+                }
             }
             break;
         }
@@ -194,20 +279,79 @@ class NFClientProtocolEntity : public NFProtocolEntity {
         
         for(int x=0; x<game->terrain.size().x; ++x)
             for(int y=0; y<game->terrain.size().y; ++y) {
-                auto sprite = terrainSprites[game->terrain.get(glm::ivec2(x,y))->numericID];
-                renderer.drawImage(sprite, glm::vec2(x,y), glm::vec2(0.5f));
-            }
-        //renderer.drawImage(imgFighter, glm::vec2(0), glm::vec2(0.25f));
+                glm::ivec2 pos = glm::ivec2(x,y);
 
-        glm::mat4 projection(1);
-        projection[0][0] = projection[1][1] = 0.1f;
-        renderer.render(projection);
+                auto terrainSprite = terrainSprites[game->terrain.get(pos)->numericID];
+                renderer.drawImage(terrainSprite, pos, glm::vec2(0.5f));
+
+                auto unit = game->unitAt(pos);
+                if(unit != nullptr) {
+
+                    renderer.mulColor(unit->player == playerIndex ? glm::vec4(0,1,0,0.25) : glm::vec4(1,0,0,0.25));
+                    renderer.drawRectangle(pos, glm::vec2(0.5f));
+                    renderer.mulColor();
+
+                    auto unitSprite = unitSprites[unit->type->numericID];
+                    renderer.drawImage(unitSprite, pos, glm::vec2(0.5f));
+
+                    if(unit->health < unit->type->maxHealth) {
+                        glm::vec2 hpBarCenter = glm::vec2(0,-0.45f) + glm::vec2(unit->position), hpBarRadii = glm::vec2(0.4f, 0.025f);
+                        float relativeHealthLeft = unit->health / (float) unit->type->maxHealth;
+
+                        renderer.mulColor({0,0,0,1});
+                        renderer.drawRectangle(hpBarCenter, hpBarRadii);
+                        if(relativeHealthLeft > 0.7)
+                            renderer.mulColor({0,1,0,1});
+                        else if(relativeHealthLeft > 0.3)
+                            renderer.mulColor({1,1,0,1});
+                        else renderer.mulColor({1,0,0,1});
+                        renderer.drawRectangle(hpBarCenter, hpBarRadii*glm::vec2(relativeHealthLeft, 1));
+                        renderer.mulColor();
+                    }
+                }
+            }
+
+        renderer.mulColor(glm::vec4(1,1,0,1) * glm::vec4(sin(glfwGetTime()*8)*0.3300 + 0.3301));
+        for(auto [succ,pred] : selectedUnitMovementRange)
+            renderer.drawImage(blankImg, succ, glm::vec2(0.5f));
+        renderer.mulColor();
+
+        if(game->terrain.inBounds(gridMousePos)) {
+            renderer.mulColor({1,1,1,0.33f});
+            renderer.drawImage(blankImg, gridMousePos, glm::vec2(0.5f));
+            renderer.mulColor();
+        }
+
+        if(selectedUnitMovementRange.find(gridMousePos) != selectedUnitMovementRange.end()) {
+            auto p1 = gridMousePos;
+            for(auto p2 = selectedUnitMovementRange[p1]; p1 != p2; p1 = p2, p2 = selectedUnitMovementRange[p2])
+                renderer.drawLine(p1, p2, 0.1);
+        }
+
+        renderer.render(projMatrix);
     }
 
     void onFullSync(const Game &gameState) override {
         std::cerr << "Received full sync from server!";
         game = std::make_unique<Game>(gameState);
+        playerIndex = game->getPlayerIndex(usernameStr);
+        projMatrix[0][0] = 1.8f / game->terrain.size().x;
+        projMatrix[1][1] = 1.8f / game->terrain.size().y;
+        projMatrix[3] = glm::vec4(-0.9f, -0.9f, 0, 1);
         guiFsm = INGAME;
+    }
+
+    void onIncrementalSync(const GameIncrementalSync &sync) override {
+
+        if(guiFsm != INGAME)
+            return;
+
+        for(auto move : sync.moveList)
+            try {
+                game->makeMove(move);
+            } catch (InvalidMoveError e) {
+                throw ProtocolError(std::string("Invalid move in received IncrementalSync: ") + std::string(e.what()));
+            }
     }
 
     void onLeaveGameRequest(const LeaveGameRequest &) override {
@@ -283,18 +427,11 @@ int main(int argc, char **argv) {
     // Initialize game content
     initGameContent();
 
-    // Connect to server
-    // TODO this should be moved somewhere else
-    int sockfd = createClientSocket("127.0.0.1", defaultServerPort);
-    if(sockfd == -1) {
-        perror("Failed to connect to server"); 
-        return EXIT_FAILURE;
-    }
-
-    NFClientProtocolEntity entity(sockfd);
-    entity.onInit();
-
-    while(entity.isRunning() && !glfwWindowShouldClose(window) && !interrupted) {
+    char ipAddrBuf[32] = "127.0.0.1";
+    const char *connectionError = nullptr;
+    std::unique_ptr<NFClientProtocolEntity> entity;
+    
+    while(!glfwWindowShouldClose(window) && !interrupted) {
 
         TimePoint t1 = Clock::now();
         Duration dt = t1 - t0;
@@ -304,20 +441,41 @@ int main(int argc, char **argv) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        entity.runNetworkEvents();
-        entity.onUpdate(dt);
-
-        ImGui::ShowDemoWindow(nullptr);
+        if(entity == nullptr) {
+            ImGui::Begin("Choose your server");
+            ImGui::InputText("Server IP Address", ipAddrBuf, sizeof(ipAddrBuf));
+            if(ImGui::Button("Connect")) {
+                connectionError = nullptr;
+                int sockfd = createClientSocket(ipAddrBuf, defaultServerPort);
+                if(sockfd == -1)
+                    connectionError = strerror(errno);
+                else {
+                    entity = std::make_unique<NFClientProtocolEntity>(sockfd);
+                    glfwGetWindowSize(window, &entity->windowSize.x, &entity->windowSize.y);
+                    entity->onInit();
+                }
+            }
+            if(connectionError != nullptr)
+                ImGui::TextColored(Colors::red, "%s", connectionError);
+            ImGui::End();
+        } else {
+            glfwGetWindowSize(window, &entity->windowSize.x, &entity->windowSize.y);
+            entity->runNetworkEvents();
+            entity->onUpdate(dt);
+            if(!entity->isRunning())
+                entity = {};
+        }
 
         // Rendering code
         glm::ivec2 framebufferSize;
         glfwGetFramebufferSize(window, &framebufferSize.x, &framebufferSize.y);
         glViewport(0, 0, framebufferSize.x, framebufferSize.y);
 
-        glClearColor(1,1,0,1);
+        glClearColor(0,0,0.1,1);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        entity.render();
+        if(entity != nullptr)
+            entity->render();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

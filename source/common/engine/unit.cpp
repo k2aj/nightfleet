@@ -5,10 +5,13 @@ UnitType::UnitType(const std::string &id) :
 {}
 
 Unit::Unit() {}
-Unit::Unit(UnitType &type, int player) : 
+Unit::Unit(UnitType &type, int player, glm::ivec2 position) : 
     player(player),
     type(&type),
-    health(type.maxHealth)
+    health(type.maxHealth),
+    actionPoints(type.actionPointsPerTurn),
+    movementPoints(type.movementPointsPerTurn),
+    position(position)
 {}
 
 bool Unit::isAlive() const {
@@ -24,12 +27,11 @@ void Unit::attack(Unit &other) {
     assert(actionPoints > 0);
 
     int totalDamage = 
-        type->attackDamage * 
-        (type->attackPenetration / (type->attackPenetration+other.type->armor)) *
-        (type->attackAccuracy / (type->attackAccuracy+other.type->evasion));
+        type->attackDamage * type->attackPenetration * type->attackAccuracy /
+        ((type->attackPenetration+other.type->armor) * (type->attackAccuracy+other.type->evasion));
 
     --actionPoints;
-    other.health = std::max(other.health, totalDamage);
+    other.health = std::max(0, other.health-totalDamage);
 }
 
 RxBuffer &operator>>(RxBuffer &rx, Unit &unit) {

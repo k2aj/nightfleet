@@ -13,7 +13,7 @@ Move Move::moveUnit(const std::vector<glm::ivec2> &unitPath) {
 }
 Move Move::attackUnit(const Unit &attacker, const Unit &target) {
     Move result;
-    result.type = MoveType::MOVE_UNIT;
+    result.type = MoveType::ATTACK_UNIT;
     result.args = {attacker.position.x, attacker.position.y, target.position.x, target.position.y};
     return result;
 }

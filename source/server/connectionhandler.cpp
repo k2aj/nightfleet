@@ -23,6 +23,7 @@ class NFServerProtocolEntity : public NFProtocolEntity {
     Server &server;
     std::string username;
     GameID gameID = 0;
+    size_t knownMoveCount;
 
     public:
     std::string haltReason;
@@ -63,10 +64,22 @@ class NFServerProtocolEntity : public NFProtocolEntity {
                 if(server.gameManager.isGameReady(gameID)) {
                     std::scoped_lock lk(server.gameManager.getGameMutex(gameID));
                     sendFullSync(server.gameManager.getGame(gameID));
+                    knownMoveCount = 0;
                     fsm = INGAME;
                 }
             }
             break;
+
+            case INGAME: {
+                std::scoped_lock lk(server.gameManager.getGameMutex(gameID));
+                auto &globalMoves = server.gameManager.getMoveList(gameID);
+                if(globalMoves.size() > knownMoveCount) {
+                    GameIncrementalSync sync;
+                    for(; knownMoveCount < globalMoves.size(); ++knownMoveCount)
+                        sync.moveList.push_back(globalMoves[knownMoveCount]);
+                    sendIncrementalSync(sync);
+                }
+            }
 
             default: break;
         }
@@ -129,6 +142,27 @@ class NFServerProtocolEntity : public NFProtocolEntity {
             throw ProtocolError("Unexpected LeaveGameRequest");
     }
 
+    void onIncrementalSync(const GameIncrementalSync &sync) override {
+        if(fsm != INGAME)
+            return;
+
+        std::scoped_lock lk(server.gameManager.getGameMutex(gameID));
+        auto &game = server.gameManager.getGame(gameID);
+        auto &globalMoves = server.gameManager.getMoveList(gameID);
+        
+        for(auto move : sync.moveList)
+            try {
+                if(game.currentPlayer() != username)
+                    throw InvalidMoveError("Player attempted to move when it was not their turn.");
+                game.makeMove(move);
+                globalMoves.push_back(move);
+                ++knownMoveCount;
+            } catch (InvalidMoveError &e) {
+                throw ProtocolError("Invalid move: " + std::string(e.what()));
+            }
+        
+    }
+
     void cleanupAndHalt() {
         if(!username.empty()) {
             if(fsm == AWAITING_GAME || fsm == INGAME)
@@ -171,6 +205,8 @@ void handleConnection(int sockfd, Server *server) {
         t0 = t1;
 
         entity.runNetworkEvents();
+        if(!entity.isRunning())
+            break;
         entity.onUpdate(dt);
 
         sleep(10ms);

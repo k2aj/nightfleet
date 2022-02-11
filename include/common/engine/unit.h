@@ -34,7 +34,7 @@ struct Unit {
     glm::ivec2 position{0};
 
     Unit();
-    Unit(UnitType &type, int player);
+    Unit(UnitType &type, int player, glm::ivec2 position);
 
     bool isAlive() const;
     void update(Game &game);

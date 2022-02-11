@@ -22,13 +22,15 @@ GameJoinError GameManager::joinGame(const std::string &username, GameID gameID) 
         return GameJoinError::GAME_DOESNT_EXIST;
 
     Entry &entry = games[gameID];
-    if(entry.ready())
+    if(entry.ready)
         return GameJoinError::GAME_ALREADY_RUNNING;
 
     entry.players.push_back(username);
+    if(entry.players.size() == entry.map->playerCount())
+        entry.ready = true;
     playerGames[username] = gameID;
 
-    if(entry.ready())
+    if(entry.ready)
         entry.game = std::make_unique<Game>(gameID, *entry.map, entry.players);
 
     return GameJoinError::NO_ERROR;
@@ -92,7 +94,7 @@ bool GameManager::isGameReady(GameID id) {
     auto it = games.find(id);
     if(it == games.end())
         return false;
-    return it->second.ready();
+    return it->second.ready;
 }
 
 Game &GameManager::getGame(GameID id) {
@@ -105,4 +107,10 @@ std::mutex &GameManager::getGameMutex(GameID id) {
     std::scoped_lock lk(mutex);
     assert(isGameReady(id));
     return games[id].gameMutex;
+}
+
+std::vector<Move> &GameManager::getMoveList(GameID id) {
+    std::scoped_lock lk(mutex);
+    assert(isGameReady(id));
+    return games[id].moveList;
 }

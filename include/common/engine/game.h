@@ -38,8 +38,18 @@ class Game : public MoveAcceptor {
     std::shared_ptr<const Unit> unitAt(const glm::ivec2 &position) const;
     std::shared_ptr<Unit> unitAt(const glm::ivec2 &position);
 
+    bool isTileOccupied(const glm::ivec2 &position);
+    int adjacentTileMovementCost(const glm::ivec2 &srcTile, const glm::ivec2 &dstTile);
+    int getPlayerIndex(const std::string &username);
+
     void spawn(std::shared_ptr<Unit> unit);
     void endTurn();
+    void forceSurrender(const std::string &username);
+
+    bool didPlayerWin(const std::string &username);
+    bool didPlayerLoose(const std::string &username);
+
+    std::map<glm::ivec2, glm::ivec2, IVec2Comparator> findReachableTiles(const Unit &u);
 
     void makeMove(const Move &) override;
 
@@ -59,6 +69,9 @@ class Game : public MoveAcceptor {
     std::vector<std::set<glm::ivec2, IVec2Comparator>> playerUnitPositions;
     std::vector<std::string> playerUsernames;
 };
+
+int taxicabDistance(const glm::ivec2 &srcTile, const glm::ivec2 &dstTile);
+bool areTilesAdjacent(const glm::ivec2 &srcTile, const glm::ivec2 &dstTile);
 
 RxBuffer &operator>>(RxBuffer &rx, Game &game);
 TxBuffer &operator<<(TxBuffer &tx, const Game &game);
