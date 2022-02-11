@@ -31,11 +31,11 @@ GameID Game::id() const {
 }
 
 std::shared_ptr<const Unit> Game::unitAt(const glm::ivec2 &position) const {
-    return units.get(position);
+    return units.getOr(position, {});
 }
 
 std::shared_ptr<Unit> Game::unitAt(const glm::ivec2 &position) {
-    return units.get(position);
+    return units.getOr(position, {});
 }
 
 void Game::spawn(std::shared_ptr<Unit> unit) {
@@ -50,6 +50,80 @@ void Game::endTurn() {
         unitAt(unitPos)->update(*this);
 
    _currentPlayer = (_currentPlayer + 1) % playerCount();
+}
+
+void Game::makeMove(const Move &m) {
+    switch(m.type) {
+
+        case MoveType::MOVE_UNIT: {
+            if(m.args.size() % 2 != 0)
+                throw InvalidMoveError("Malformed move description.");
+            for(int i=0; i+2<m.args.size(); i+=2)
+                moveUnitOneTile(glm::ivec2(m.args[i], m.args[i+1]), glm::ivec2(m.args[i+2], m.args[i+3]));
+        }
+        break;
+
+        case MoveType::ATTACK_UNIT: {
+            if(m.args.size() != 4)
+                throw InvalidMoveError("Malformed move description.");
+
+            glm::ivec2 pAttacker(m.args[0], m.args[1]), pTarget(m.args[2], m.args[3]);
+            auto attacker = unitAt(pAttacker), target = unitAt(pTarget);
+
+            if(attacker == nullptr)
+                throw InvalidMoveError("No attacking unit.");
+            if(attacker->player != _currentPlayer)
+                throw InvalidMoveError("Player does not own the unit.");
+            if(target == nullptr)
+                throw InvalidMoveError("No target.");
+            if(attacker->actionPoints <= 0)
+                throw InvalidMoveError("Not enough action points.");
+
+            attacker->attack(*target);
+            if(!target->isAlive()) {
+                playerUnitPositions[target->player].erase(target->position);
+                units.set(target->position, {});
+            }
+        }
+        break;
+
+        case MoveType::END_TURN:
+            endTurn();
+        break;
+
+        default:
+            throw InvalidMoveError("Not implemented.");
+    }
+}
+
+void Game::moveUnitOneTile(const glm::ivec2 &from, const glm::ivec2 &to) {
+    if(abs(from.x - to.x) + abs(from.y - to.y) != 1)
+        throw InvalidMoveError("Discontinuous movement path.");
+
+    auto unit = unitAt(from);
+
+    if(unit == nullptr)
+        throw InvalidMoveError("Tile does not contain a unit.");
+
+    if(unit->player != _currentPlayer)
+        throw InvalidMoveError("Player does not own the unit.");
+
+    if(unit->movementPoints <= 0)
+        throw InvalidMoveError("Movement points depleted.");
+
+    if(unitAt(to))
+        throw InvalidMoveError("Destination tile is occupied.");
+
+    if(!terrain.inBounds(to))
+        throw InvalidMoveError("Destination tile out of bounds.");
+    
+    unit->position = to;
+    unit->movementPoints -= terrain.get(from)->movementCost;
+    unit->movementPoints -= terrain.get(to)->movementCost;
+    units.set(to, unit);
+    units.set(from, {});
+    playerUnitPositions[_currentPlayer].erase(from);
+    playerUnitPositions[_currentPlayer].insert(to);
 }
 
 template<typename T>

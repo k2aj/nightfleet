@@ -4,4 +4,5 @@ target_sources(nfcommon PRIVATE
     unit.cpp
     content.cpp
     game.cpp
+    move.cpp
 )

@@ -129,19 +129,28 @@ class NFServerProtocolEntity : public NFProtocolEntity {
             throw ProtocolError("Unexpected LeaveGameRequest");
     }
 
+    void cleanupAndHalt() {
+        if(!username.empty()) {
+            if(fsm == AWAITING_GAME || fsm == INGAME)
+                server.gameManager.leaveGame(username);
+            server.userManager.logout(username);
+        }
+        halt();
+    }
+
     void onProtocolError(const ProtocolError &e) override {
         haltReason = std::string("ProtocolError: ")+std::string(e.what());
-        halt();
+        cleanupAndHalt();
     }
 
     void onTimeout() override {
         haltReason = "timed out";
-        halt();
+        cleanupAndHalt();
     }
     
     void onDisconnect() override {
         haltReason = "closed by remote host";
-        halt();
+        cleanupAndHalt();
     }
 };
 

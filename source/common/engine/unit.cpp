@@ -20,6 +20,18 @@ void Unit::update(Game &game) {
     movementPoints = type->movementPointsPerTurn;
 }
 
+void Unit::attack(Unit &other) {
+    assert(actionPoints > 0);
+
+    int totalDamage = 
+        type->attackDamage * 
+        (type->attackPenetration / (type->attackPenetration+other.type->armor)) *
+        (type->attackAccuracy / (type->attackAccuracy+other.type->evasion));
+
+    --actionPoints;
+    other.health = std::max(other.health, totalDamage);
+}
+
 RxBuffer &operator>>(RxBuffer &rx, Unit &unit) {
     unit.type = readContentType<UnitType>(rx);
     return (rx >> unit.player >> unit.health >> unit.movementPoints >> unit.actionPoints >> unit.position.x >> unit.position.y);

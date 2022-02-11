@@ -10,6 +10,7 @@
 #include <engine/field.h>
 #include <engine/map.h>
 #include <engine/unit.h>
+#include <engine/move.h>
 
 struct IVec2Comparator {
     bool operator()(const glm::ivec2 &lhs, const glm::ivec2 &rhs) const {
@@ -21,7 +22,7 @@ struct IVec2Comparator {
 
 typedef int64_t GameID;
 
-class Game {
+class Game : public MoveAcceptor {
 
     friend RxBuffer &operator>>(RxBuffer &rx, Game &game);
     friend TxBuffer &operator<<(TxBuffer &tx, const Game &game);
@@ -40,16 +41,20 @@ class Game {
     void spawn(std::shared_ptr<Unit> unit);
     void endTurn();
 
-    private:
-
-    int _currentPlayer = 0;
-    GameID _id;
+    void makeMove(const Move &) override;
 
     // we don't store a Map because maybe the terrain will get modified during the game
     Field<const TerrainType *> terrain;
 
     // there can only be one unit per terrain tile
     Field<std::shared_ptr<Unit>> units;
+
+    private:
+
+    void moveUnitOneTile(const glm::ivec2 &from, const glm::ivec2 &to);
+
+    int _currentPlayer = 0;
+    GameID _id;
 
     std::vector<std::set<glm::ivec2, IVec2Comparator>> playerUnitPositions;
     std::vector<std::string> playerUsernames;

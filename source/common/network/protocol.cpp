@@ -78,28 +78,12 @@ TxBuffer &operator<<(TxBuffer &tx, const LeaveGameRequest &request) {
     return tx;
 }
 
-
-// TODO fill these stubs
 RxBuffer &operator>>(RxBuffer &rx, GameIncrementalSync &s) {
-    return rx;
+    return (rx >> s.moveList);
 }
 TxBuffer &operator<<(TxBuffer &tx, const GameIncrementalSync &s) {
-    return tx;
+    return (tx << s.moveList);
 }
-
-#define DEFINE_ENUM_SERDE(Enum) \
-    RxBuffer &operator>>(RxBuffer &rx, Enum &enumValue) { \
-        uint32_t rawValue; \
-        rx >> rawValue; \
-        if(rawValue >= 0 && rawValue < static_cast<uint32_t>(Enum::COUNT)) \
-            enumValue = static_cast<Enum>(rawValue); \
-        else \
-            throw ProtocolError("Invalid enum value."); \
-        return rx; \
-    } \
-    TxBuffer &operator<<(TxBuffer &tx, const Enum &enumValue) { \
-        return (tx << static_cast<uint32_t>(enumValue)); \
-    }
 
 DEFINE_ENUM_SERDE(MessageType)
 DEFINE_ENUM_SERDE(LoginResponse)

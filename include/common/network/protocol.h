@@ -8,9 +8,11 @@
 #include <network/message.h>
 #include <network/rxbuffer.h>
 #include <network/txbuffer.h>
+#include <network/serde_macros.h>
 #include <util/time.h>
 #include <util/version.h>
 #include <engine/game.h>
+#include <engine/move.h>
 
 /** Checks if client and server application versions match.
  *  @returns true if client and server application versions are compatible with each other.
@@ -79,11 +81,10 @@ enum class GameJoinError : uint32_t {
     COUNT = 6
 };
 
-struct GameIncrementalSync {};
-
-#define DECLARE_SERDE(Type) \
-    RxBuffer &operator>>(RxBuffer &rx, Type &value); \
-    TxBuffer &operator<<(TxBuffer &tx, const Type &value);
+struct GameIncrementalSync {
+    // TODO add extra validation via SHA256 or something
+    std::vector<Move> moveList;
+};
 
 DECLARE_SERDE(MessageType)
 DECLARE_SERDE(LoginRequest)
@@ -95,8 +96,6 @@ DECLARE_SERDE(JoinGameRequest)
 DECLARE_SERDE(LeaveGameRequest)
 DECLARE_SERDE(GameJoinError)
 DECLARE_SERDE(GameIncrementalSync)
-
-#undef DECLARE_SERDE
 
 class NFProtocolEntity {
     public:

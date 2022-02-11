@@ -38,14 +38,22 @@ class NFClientProtocolEntity : public NFProtocolEntity {
     std::string loginRejectionReason;
     const Map *selectedMap = nullptr;
     char enteredGameID[32] = {'\0'};
+    std::unique_ptr<Game> game;
 
     SpriteRenderer renderer;
+    std::vector<AtlasArea> unitSprites, terrainSprites;
+
     AtlasArea imgFighter;
 
     public:
 
     NFClientProtocolEntity(int sockfd) : NFProtocolEntity(sockfd) {
-        imgFighter = renderer.loadImage("../textures/units/fighter.png");
+
+        for(int id = 0; id < UnitType::registry.size(); ++id)
+            unitSprites.push_back(renderer.loadImage(std::string("../textures/units/") + UnitType::registry[id].id + std::string(".png")));
+
+        for(int id = 0; id < TerrainType::registry.size(); ++id)
+            terrainSprites.push_back(renderer.loadImage(std::string("../textures/terrain/") + TerrainType::registry[id].id + std::string(".png")));
     }
 
     void onVersionHandshake(const Version &version) override {
@@ -178,14 +186,27 @@ class NFClientProtocolEntity : public NFProtocolEntity {
     }
 
     void render() {
+
+        if(guiFsm != INGAME)
+            return;
+
         renderer.clear();
-        renderer.drawImage(imgFighter, glm::vec2(0), glm::vec2(0.25f));
-        renderer.render(glm::mat4(1));
+        
+        for(int x=0; x<game->terrain.size().x; ++x)
+            for(int y=0; y<game->terrain.size().y; ++y) {
+                auto sprite = terrainSprites[game->terrain.get(glm::ivec2(x,y))->numericID];
+                renderer.drawImage(sprite, glm::vec2(x,y), glm::vec2(0.5f));
+            }
+        //renderer.drawImage(imgFighter, glm::vec2(0), glm::vec2(0.25f));
+
+        glm::mat4 projection(1);
+        projection[0][0] = projection[1][1] = 0.1f;
+        renderer.render(projection);
     }
 
     void onFullSync(const Game &gameState) override {
         std::cerr << "Received full sync from server!";
-        //todo start the game
+        game = std::make_unique<Game>(gameState);
         guiFsm = INGAME;
     }
 

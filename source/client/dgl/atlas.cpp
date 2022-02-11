@@ -32,7 +32,7 @@ Atlas::Atlas(const glm::ivec2 &minSize) :
 {
     texture = allocateRgbaTexture(size());
     freeBlocks.resize(log2Size+1);
-    freeBlocks.at(log2Size).push_back({{0,0}, glm::u16vec2(size())});
+    freeBlocks.at(log2Size).push_back({{0,0}, size()});
 }
 
 AtlasArea Atlas::allocate(const glm::ivec2 &minSize) {
@@ -42,6 +42,8 @@ AtlasArea Atlas::allocate(const glm::ivec2 &minSize) {
         createFreeBlocks(log2NeededSize);
 
     auto result = freeBlocks[log2NeededSize].back();
+    std::cerr << "Min size: " << minSize.x << ' ' << minSize.y << std::endl;
+    std::cerr << "Block: " << result.offset.x << ' ' << result.offset.y << ' ' << result.size.x << ' ' << result.size.y << std::endl;
     freeBlocks[log2NeededSize].pop_back();
     return result;
 }
@@ -75,13 +77,19 @@ void Atlas::createFreeBlocks(int log2BlkSize) {
 
     while(log2BlkSize >= log2Size)
         expand();
+
+    if(!freeBlocks[log2BlkSize].empty())
+        return;
     
-    if(freeBlocks[log2BlkSize+1].empty())
+    if(freeBlocks[log2BlkSize+1].empty()) {
+        if(log2BlkSize+1 >= log2Size)
+            expand();
         createFreeBlocks(log2BlkSize+1);
+    }
 
     auto block = freeBlocks[log2BlkSize+1].back();
-    auto newBlockSize = block.size/glm::ivec2(2);
     freeBlocks[log2BlkSize+1].pop_back();
+    auto newBlockSize = block.size/glm::ivec2(2);
 
     for(int x=0; x<=1; ++x)
         for(int y=0; y<=1; ++y)
@@ -100,7 +108,13 @@ void Atlas::expand() {
     );
     glDeleteTextures(1, &texture);
     texture = newTexture;
+    
+    freeBlocks.back().push_back({{0,size().y}, size()});
+    freeBlocks.back().push_back({{size().x,0}, size()});
+    freeBlocks.back().push_back({size(),size()});
+    freeBlocks.push_back({});
     ++log2Size;
+    std::cerr << "Size after expand = " << size().x << ' ' << size().y << std::endl;
 }
 
 glm::ivec2 Atlas::size() const {

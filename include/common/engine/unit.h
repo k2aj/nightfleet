@@ -13,11 +13,16 @@ class UnitType : public ContentType<UnitType> {
     public:
 
     // unit stats
-    int maxHealth = 10,
-        armor = 0,
-        evasion = 0,
-        movementPointsPerTurn = 5,
-        actionPointsPerTurn = 1;
+    int maxHealth = 50,
+        armor = 5,
+        evasion = 5,
+        movementPointsPerTurn = 50,
+        actionPointsPerTurn = 1,
+
+        attackDamage = 30,
+        attackPenetration = 20,
+        attackAccuracy = 20,
+        attackRange = 1;
 
     UnitType(const std::string &id);
 };
@@ -33,6 +38,8 @@ struct Unit {
 
     bool isAlive() const;
     void update(Game &game);
+
+    void attack(Unit &other);
 };
 
 RxBuffer &operator>>(RxBuffer &rx, Unit &unit);
